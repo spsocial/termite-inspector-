@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ตั้งค่า - ระบบตรวจเช็คกำจัดปลวก</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <div class="sidebar">
+      <div class="sidebar-header"><h1>🏠 ระบบตรวจปลวก</h1></div>
+      <nav class="sidebar-nav">
+        <a href="/dashboard"><span class="icon">📊</span> แดชบอร์ด</a>
+        <a href="/customers"><span class="icon">👥</span> รายชื่อลูกค้า</a>
+        <a href="/customer-form"><span class="icon">➕</span> เพิ่มลูกค้า</a>
+        <a href="/inspections"><span class="icon">📋</span> ตารางตรวจเช็ค</a>
+        <a href="/history"><span class="icon">📜</span> ประวัติแก้ไข</a>
+        <a href="/settings"><span class="icon">⚙️</span> ตั้งค่า</a>
+      </nav>
+      <div class="sidebar-footer"><a href="#" onclick="logout()"><span>🚪</span> ออกจากระบบ</a></div>
+    </div>
+    <div class="sidebar-overlay"></div>
+    <button class="sidebar-toggle">☰</button>
+
+    <div class="main-content">
+      <div class="page-header">
+        <h2>ตั้งค่า</h2>
+        <p>จัดการระบบและการแจ้งเตือน</p>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+        <!-- เปลี่ยน PIN -->
+        <div class="card">
+          <div class="card-header"><h3>🔑 เปลี่ยนรหัส PIN</h3></div>
+          <div class="card-body">
+            <div class="form-group">
+              <label>PIN ปัจจุบัน</label>
+              <input type="password" class="form-control" id="currentPin" placeholder="PIN ปัจจุบัน" maxlength="10">
+            </div>
+            <div class="form-group">
+              <label>PIN ใหม่</label>
+              <input type="password" class="form-control" id="newPin" placeholder="PIN ใหม่ (อย่างน้อย 4 หลัก)" maxlength="10">
+            </div>
+            <div class="form-group">
+              <label>ยืนยัน PIN ใหม่</label>
+              <input type="password" class="form-control" id="confirmPin" placeholder="ยืนยัน PIN ใหม่" maxlength="10">
+            </div>
+            <button class="btn btn-primary" onclick="changePin()">🔑 เปลี่ยน PIN</button>
+          </div>
+        </div>
+
+        <!-- Telegram -->
+        <div class="card">
+          <div class="card-header"><h3>📱 Telegram แจ้งเตือน</h3></div>
+          <div class="card-body">
+            <p style="font-size:14px;color:var(--gray-500);margin-bottom:16px;">
+              ทดสอบส่งข้อความแจ้งเตือนไปยัง Telegram
+            </p>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="btn btn-primary" onclick="testTelegram()">🧪 ทดสอบแจ้งเตือน</button>
+              <button class="btn btn-warning" onclick="sendDailySummary()">📋 สรุปประจำวัน</button>
+            </div>
+            <div id="telegramResult" style="margin-top:16px;"></div>
+          </div>
+        </div>
+
+        <!-- Export -->
+        <div class="card">
+          <div class="card-header"><h3>📥 ส่งออกข้อมูล</h3></div>
+          <div class="card-body">
+            <div style="display:flex;flex-direction:column;gap:12px;">
+              <button class="btn btn-outline" onclick="downloadExport('/api/export/customers?format=excel&status=all', 'customers_all.xlsx')">
+                📊 ลูกค้าทั้งหมด (Excel)
+              </button>
+              <button class="btn btn-outline" onclick="downloadExport('/api/export/customers?format=pdf&status=all', 'customers_all.pdf')">
+                📄 ลูกค้าทั้งหมด (PDF)
+              </button>
+              <button class="btn btn-outline" onclick="downloadExport('/api/export/customers?format=excel&status=active', 'customers_active.xlsx')">
+                ✅ ลูกค้าใช้งาน (Excel)
+              </button>
+              <button class="btn btn-outline" onclick="downloadExport('/api/export/inspections?format=excel&status=overdue', 'overdue.xlsx')">
+                🔴 เกินกำหนด (Excel)
+              </button>
+              <button class="btn btn-outline" onclick="downloadExport('/api/export/inspections?format=excel', 'inspections_all.xlsx')">
+                📋 ตรวจเช็คทั้งหมด (Excel)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ข้อมูลระบบ -->
+        <div class="card">
+          <div class="card-header"><h3>ℹ️ ข้อมูลระบบ</h3></div>
+          <div class="card-body">
+            <div style="font-size:14px; line-height:2;">
+              <p><strong>เวอร์ชัน:</strong> 1.0.0</p>
+              <p><strong>Platform:</strong> Node.js + Express</p>
+              <p><strong>Database:</strong> Google Sheets</p>
+              <p><strong>Storage:</strong> Google Drive</p>
+              <p><strong>แจ้งเตือน:</strong> Telegram Bot</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    async function changePin() {
+      const currentPin = document.getElementById('currentPin').value;
+      const newPin = document.getElementById('newPin').value;
+      const confirmPin = document.getElementById('confirmPin').value;
+
+      if (!currentPin || !newPin) {
+        showToast('กรุณากรอกข้อมูลให้ครบ', 'error');
+        return;
+      }
+
+      if (newPin !== confirmPin) {
+        showToast('PIN ใหม่ไม่ตรงกัน', 'error');
+        return;
+      }
+
+      if (newPin.length < 4) {
+        showToast('PIN ต้องมีอย่างน้อย 4 หลัก', 'error');
+        return;
+      }
+
+      try {
+        await API.post('/api/auth/change-pin', { currentPin, newPin });
+        showToast('เปลี่ยน PIN เรียบร้อย');
+        document.getElementById('currentPin').value = '';
+        document.getElementById('newPin').value = '';
+        document.getElementById('confirmPin').value = '';
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function testTelegram() {
+      const el = document.getElementById('telegramResult');
+      el.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังทดสอบ...</div>';
+
+      try {
+        const result = await API.post('/api/telegram/test');
+        if (result.success) {
+          el.innerHTML = '<div class="badge badge-success" style="font-size:14px;padding:8px 16px;">✓ ส่งสำเร็จ! ตรวจสอบ Telegram ของคุณ</div>';
+        } else {
+          el.innerHTML = `<div class="badge badge-danger" style="font-size:14px;padding:8px 16px;">✕ ส่งไม่สำเร็จ: ${JSON.stringify(result.result)}</div>`;
+        }
+      } catch (err) {
+        el.innerHTML = `<div class="badge badge-danger" style="font-size:14px;padding:8px 16px;">✕ ${err.message}</div>`;
+      }
+    }
+
+    async function sendDailySummary() {
+      try {
+        await API.post('/api/telegram/daily-summary');
+        showToast('ส่งสรุปประจำวันเรียบร้อย');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+  </script>
+</body>
+</html>

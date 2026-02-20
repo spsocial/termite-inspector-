@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ตารางตรวจเช็ค - ระบบตรวจเช็คกำจัดปลวก</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .inspection-card {
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      transition: all 0.2s;
+    }
+    .inspection-card:hover { box-shadow: var(--shadow); }
+    .inspection-card.overdue { border-left: 4px solid var(--danger); background: var(--danger-light); }
+    .inspection-card.pending-soon { border-left: 4px solid var(--warning); }
+    .inspection-card.completed { border-left: 4px solid var(--success); opacity: 0.7; }
+    .inspection-card .checkbox {
+      width: 24px; height: 24px; border-radius: 50%;
+      border: 2px solid var(--gray-300); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: all 0.2s;
+    }
+    .inspection-card .checkbox:hover { border-color: var(--success); }
+    .inspection-card .checkbox.checked {
+      background: var(--success); border-color: var(--success); color: white;
+    }
+    .inspection-card .info { flex: 1; }
+    .inspection-card .info h4 { font-size: 15px; font-weight: 600; }
+    .inspection-card .info .meta { font-size: 13px; color: var(--gray-500); margin-top: 4px; }
+    .batch-bar {
+      position: fixed; bottom: 0; left: 260px; right: 0;
+      background: var(--primary); color: white; padding: 16px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      z-index: 50; transform: translateY(100%); transition: transform 0.3s;
+    }
+    .batch-bar.show { transform: translateY(0); }
+    @media (max-width: 768px) {
+      .batch-bar { left: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <div class="sidebar">
+      <div class="sidebar-header"><h1>🏠 ระบบตรวจปลวก</h1></div>
+      <nav class="sidebar-nav">
+        <a href="/dashboard"><span class="icon">📊</span> แดชบอร์ด</a>
+        <a href="/customers"><span class="icon">👥</span> รายชื่อลูกค้า</a>
+        <a href="/customer-form"><span class="icon">➕</span> เพิ่มลูกค้า</a>
+        <a href="/inspections"><span class="icon">📋</span> ตารางตรวจเช็ค</a>
+        <a href="/history"><span class="icon">📜</span> ประวัติแก้ไข</a>
+        <a href="/settings"><span class="icon">⚙️</span> ตั้งค่า</a>
+      </nav>
+      <div class="sidebar-footer"><a href="#" onclick="logout()"><span>🚪</span> ออกจากระบบ</a></div>
+    </div>
+    <div class="sidebar-overlay"></div>
+    <button class="sidebar-toggle">☰</button>
+
+    <div class="main-content">
+      <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <h2 id="pageTitle">ตารางตรวจเช็ค</h2>
+          <p>รายการงานตรวจเช็คทั้งหมด</p>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm btn-outline" onclick="exportInspections()">📥 Export Excel</button>
+        </div>
+      </div>
+
+      <!-- Filter -->
+      <div class="filter-bar">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="searchInput" placeholder="ค้นหาชื่อลูกค้า..." oninput="debounceSearch()">
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs">
+        <button class="tab active" data-status="all" onclick="filterTab('all', this)">
+          ทั้งหมด <span class="count" id="countAll">0</span>
+        </button>
+        <button class="tab" data-status="overdue" onclick="filterTab('overdue', this)">
+          เกินกำหนด <span class="count" id="countOverdue">0</span>
+        </button>
+        <button class="tab" data-status="pending" onclick="filterTab('pending', this)">
+          รอดำเนินการ <span class="count" id="countPending">0</span>
+        </button>
+        <button class="tab" data-status="completed" onclick="filterTab('completed', this)">
+          เสร็จสิ้น <span class="count" id="countCompleted">0</span>
+        </button>
+      </div>
+
+      <!-- List -->
+      <div id="inspectionList">
+        <div class="loading"><div class="spinner"></div>กำลังโหลด...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Batch Action Bar -->
+  <div class="batch-bar" id="batchBar">
+    <span>เลือกแล้ว <strong id="selectedCount">0</strong> รายการ</span>
+    <button class="btn btn-success" onclick="batchComplete()">✓ ทำเสร็จทั้งหมด</button>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    let allInspections = [];
+    let currentTab = 'all';
+    let selectedIds = new Set();
+    let searchTimer;
+    const customerId = getParam('customerId');
+
+    if (customerId) {
+      document.getElementById('pageTitle').textContent = `ตารางตรวจเช็ค - ${customerId}`;
+    }
+
+    async function loadInspections() {
+      try {
+        let url = '/api/inspections';
+        if (customerId) url += `?customerId=${customerId}`;
+        allInspections = await API.get(url);
+        updateCounts();
+        renderList();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    function updateCounts() {
+      const counts = { all: allInspections.length, pending: 0, overdue: 0, completed: 0 };
+      allInspections.forEach(i => {
+        if (i.status === 'overdue' || (i.status === 'pending' && i.daysUntilDue < 0)) {
+          counts.overdue++;
+        } else if (counts[i.status] !== undefined) {
+          counts[i.status]++;
+        }
+      });
+      document.getElementById('countAll').textContent = counts.all;
+      document.getElementById('countOverdue').textContent = counts.overdue;
+      document.getElementById('countPending').textContent = counts.pending;
+      document.getElementById('countCompleted').textContent = counts.completed;
+    }
+
+    function renderList() {
+      const el = document.getElementById('inspectionList');
+      let data = [...allInspections];
+
+      // Filter by tab
+      if (currentTab === 'overdue') {
+        data = data.filter(i => i.status === 'overdue' || (i.status === 'pending' && i.daysUntilDue < 0));
+      } else if (currentTab !== 'all') {
+        data = data.filter(i => i.status === currentTab);
+      }
+
+      // Search
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      if (search) {
+        data = data.filter(i =>
+          i.customerName.toLowerCase().includes(search) ||
+          i.id.toLowerCase().includes(search) ||
+          i.customerId.toLowerCase().includes(search)
+        );
+      }
+
+      if (data.length === 0) {
+        el.innerHTML = '<div class="empty-state"><div class="icon">📋</div><h3>ไม่มีรายการตรวจเช็ค</h3></div>';
+        return;
+      }
+
+      el.innerHTML = data.map(i => {
+        const isOverdue = i.status === 'overdue' || (i.status === 'pending' && i.daysUntilDue < 0);
+        const isPendingSoon = !isOverdue && i.status === 'pending' && i.daysUntilDue <= 7;
+        const isCompleted = i.status === 'completed';
+        const isSelected = selectedIds.has(i.id);
+
+        let cardClass = 'inspection-card';
+        if (isOverdue) cardClass += ' overdue';
+        else if (isPendingSoon) cardClass += ' pending-soon';
+        else if (isCompleted) cardClass += ' completed';
+
+        return `
+          <div class="${cardClass}">
+            ${!isCompleted ? `
+              <div class="checkbox ${isSelected ? 'checked' : ''}" onclick="toggleSelect('${i.id}', this)">
+                ${isSelected ? '✓' : ''}
+              </div>
+            ` : '<div style="width:24px"></div>'}
+            <div class="info">
+              <h4>${i.customerName}</h4>
+              <div class="meta">
+                ${i.id} | รอบที่ ${i.round} | กำหนด ${toThaiDate(i.dueDate)}
+                ${i.actualDate ? ` | ตรวจจริง ${toThaiDate(i.actualDate)}` : ''}
+                ${i.technician ? ` | ช่าง: ${i.technician}` : ''}
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              ${isOverdue ? `<span class="badge badge-danger">เกิน ${Math.abs(i.daysUntilDue)} วัน</span>` : ''}
+              ${isPendingSoon ? daysLabel(i.daysUntilDue) : ''}
+              ${isCompleted ? statusBadge('completed') : ''}
+              ${!isCompleted ? `
+                <button class="btn btn-sm btn-success" onclick="quickComplete('${i.id}', '${i.customerName}')">✓ เสร็จ</button>
+              ` : ''}
+              <a href="/inspection-detail?id=${i.id}" class="btn btn-sm btn-outline">ดู</a>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function filterTab(status, el) {
+      currentTab = status;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+      renderList();
+    }
+
+    function debounceSearch() {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(renderList, 300);
+    }
+
+    function toggleSelect(id, el) {
+      if (selectedIds.has(id)) {
+        selectedIds.delete(id);
+        el.classList.remove('checked');
+        el.textContent = '';
+      } else {
+        selectedIds.add(id);
+        el.classList.add('checked');
+        el.textContent = '✓';
+      }
+      updateBatchBar();
+    }
+
+    function updateBatchBar() {
+      const bar = document.getElementById('batchBar');
+      document.getElementById('selectedCount').textContent = selectedIds.size;
+      bar.classList.toggle('show', selectedIds.size > 0);
+    }
+
+    async function quickComplete(id, customerName) {
+      showModal('บันทึกผลตรวจเช็ค', `
+        <p style="margin-bottom:16px"><strong>${customerName}</strong></p>
+        <div class="form-group">
+          <label>ช่างผู้ตรวจ</label>
+          <input type="text" class="form-control" id="qcTech" placeholder="ชื่อช่าง">
+        </div>
+        <div class="form-group">
+          <label>ผลการตรวจ</label>
+          <textarea class="form-control" id="qcResult" placeholder="ผลการตรวจ"></textarea>
+        </div>
+      `, `
+        <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+        <button class="btn btn-success" onclick="confirmComplete('${id}')">✓ บันทึก</button>
+      `);
+    }
+
+    async function confirmComplete(id) {
+      try {
+        await API.put(`/api/inspections/${id}/complete`, {
+          technician: document.getElementById('qcTech').value,
+          result: document.getElementById('qcResult').value,
+        });
+        showToast('บันทึกเสร็จสิ้นเรียบร้อย');
+        closeModal();
+        loadInspections();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function batchComplete() {
+      if (selectedIds.size === 0) return;
+
+      showModal('ยืนยันทำเสร็จหลายรายการ', `
+        <p>จะบันทึกเสร็จสิ้น <strong>${selectedIds.size}</strong> รายการ</p>
+        <div class="form-group" style="margin-top:16px">
+          <label>ช่างผู้ตรวจ</label>
+          <input type="text" class="form-control" id="batchTech" placeholder="ชื่อช่าง">
+        </div>
+        <div class="form-group">
+          <label>ผลการตรวจ</label>
+          <textarea class="form-control" id="batchResult" placeholder="ผลการตรวจ"></textarea>
+        </div>
+      `, `
+        <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+        <button class="btn btn-success" onclick="confirmBatchComplete()">✓ ยืนยัน</button>
+      `);
+    }
+
+    async function confirmBatchComplete() {
+      try {
+        const result = await API.post('/api/inspections/batch-complete', {
+          ids: Array.from(selectedIds),
+          technician: document.getElementById('batchTech').value,
+          result: document.getElementById('batchResult').value,
+        });
+        showToast(`บันทึกเสร็จ ${result.completedCount} รายการ`);
+        selectedIds.clear();
+        updateBatchBar();
+        closeModal();
+        loadInspections();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    function exportInspections() {
+      const status = currentTab !== 'all' ? `&status=${currentTab}` : '';
+      const cid = customerId ? `&customerId=${customerId}` : '';
+      downloadExport(`/api/export/inspections?format=excel${status}${cid}`, 'inspections.xlsx');
+    }
+
+    loadInspections();
+  </script>
+</body>
+</html>

@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ฟอร์มลูกค้า - ระบบตรวจเช็คกำจัดปลวก</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <div class="sidebar">
+      <div class="sidebar-header"><h1>🏠 ระบบตรวจปลวก</h1></div>
+      <nav class="sidebar-nav">
+        <a href="/dashboard"><span class="icon">📊</span> แดชบอร์ด</a>
+        <a href="/customers"><span class="icon">👥</span> รายชื่อลูกค้า</a>
+        <a href="/customer-form"><span class="icon">➕</span> เพิ่มลูกค้า</a>
+        <a href="/inspections"><span class="icon">📋</span> ตารางตรวจเช็ค</a>
+        <a href="/history"><span class="icon">📜</span> ประวัติแก้ไข</a>
+        <a href="/settings"><span class="icon">⚙️</span> ตั้งค่า</a>
+      </nav>
+      <div class="sidebar-footer"><a href="#" onclick="logout()"><span>🚪</span> ออกจากระบบ</a></div>
+    </div>
+    <div class="sidebar-overlay"></div>
+    <button class="sidebar-toggle">☰</button>
+
+    <div class="main-content">
+      <div class="page-header">
+        <h2 id="pageTitle">เพิ่มลูกค้าใหม่</h2>
+        <p id="pageDesc">กรอกข้อมูลลูกค้าเพื่อสร้างสัญญาและตารางตรวจเช็คอัตโนมัติ</p>
+      </div>
+
+      <div class="card">
+        <div class="card-body">
+          <form id="customerForm" onsubmit="submitForm(event)">
+            <div class="form-row">
+              <div class="form-group">
+                <label>ชื่อลูกค้า *</label>
+                <input type="text" class="form-control" id="name" required placeholder="ชื่อ-นามสกุล หรือชื่อบริษัท">
+              </div>
+              <div class="form-group">
+                <label>เบอร์โทร</label>
+                <input type="tel" class="form-control" id="phone" placeholder="0XX-XXX-XXXX">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>ที่อยู่</label>
+              <textarea class="form-control" id="address" placeholder="ที่อยู่เต็ม"></textarea>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>ลักษณะอาคาร</label>
+                <select class="form-control" id="buildingType">
+                  <option value="">-- เลือก --</option>
+                  <option>บ้านปูน 1 ชั้น</option>
+                  <option>บ้านปูน 2 ชั้น</option>
+                  <option>บ้านครึ่งปูนครึ่งไม้ 1 ชั้น</option>
+                  <option>บ้านครึ่งปูนครึ่งไม้ 2 ชั้น</option>
+                  <option>บ้านไม้</option>
+                  <option>ทาวน์เฮาส์</option>
+                  <option>อาคารพาณิชย์</option>
+                  <option>โกดัง</option>
+                  <option>ร้านศึกษาภัณฑ์</option>
+                  <option>อื่นๆ</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>ลักษณะงาน</label>
+                <select class="form-control" id="jobType">
+                  <option value="">-- เลือก --</option>
+                  <option>เจาะอัดน้ำยาลงดิน</option>
+                  <option>เติมน้ำยาลงท่อ</option>
+                  <option>วางท่อน้ำยา</option>
+                  <option>พ่นน้ำยา</option>
+                  <option>วางเหยื่อล่อ</option>
+                  <option>อื่นๆ</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>ราคา (บาท)</label>
+                <input type="number" class="form-control" id="price" placeholder="0">
+              </div>
+              <div class="form-group">
+                <label>วันทำสัญญา *</label>
+                <input type="date" class="form-control" id="contractStart" required onchange="calcEndDate()">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>รอบรับประกัน (ปี) *</label>
+                <select class="form-control" id="warrantyYears" required onchange="calcEndDate()">
+                  <option value="3">3 ปี</option>
+                  <option value="5">5 ปี</option>
+                  <option value="7">7 ปี</option>
+                  <option value="10">10 ปี</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>รอบตรวจเช็ค (เดือน)</label>
+                <select class="form-control" id="inspectionIntervalMonths" onchange="calcRounds()">
+                  <option value="3">ทุก 3 เดือน</option>
+                  <option value="4" selected>ทุก 4 เดือน</option>
+                  <option value="6">ทุก 6 เดือน</option>
+                  <option value="12">ทุก 12 เดือน</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>วันหมดสัญญา (คำนวณอัตโนมัติ)</label>
+                <input type="date" class="form-control" id="contractEnd" readonly style="background:var(--gray-100);">
+              </div>
+              <div class="form-group">
+                <label>จำนวนรอบตรวจเช็ค</label>
+                <input type="text" class="form-control" id="totalRounds" readonly style="background:var(--gray-100);" value="จะสร้างอัตโนมัติ">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>หมายเหตุ</label>
+              <textarea class="form-control" id="notes" placeholder="หมายเหตุเพิ่มเติม (ไม่บังคับ)"></textarea>
+            </div>
+
+            <!-- แสดงเฉพาะเมื่อแก้ไข -->
+            <div id="statusGroup" style="display:none;">
+              <div class="form-group">
+                <label>สถานะ</label>
+                <select class="form-control" id="status">
+                  <option value="active">ใช้งาน</option>
+                  <option value="expired">หมดสัญญา</option>
+                  <option value="cancelled">ยกเลิก</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="display:flex; gap:12px; margin-top:24px;">
+              <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">💾 บันทึก</button>
+              <a href="/customers" class="btn btn-secondary btn-lg">ยกเลิก</a>
+              <button type="button" class="btn btn-warning btn-lg" id="renewBtn" style="display:none;" onclick="showRenewModal()">🔄 ต่อสัญญา</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- ตารางตรวจเช็คของลูกค้า (แสดงเมื่อแก้ไข) -->
+      <div class="card" id="inspectionsCard" style="display:none; margin-top:20px;">
+        <div class="card-header">
+          <h3>📋 ตารางตรวจเช็ค</h3>
+          <a href="#" id="viewAllInspections" class="btn btn-sm btn-outline">ดูทั้งหมด</a>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>รอบ</th>
+                <th>วันกำหนด</th>
+                <th>วันตรวจจริง</th>
+                <th>สถานะ</th>
+                <th>ช่าง</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="inspectionsList"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    const editId = getParam('id');
+    let customerData = null;
+
+    if (editId) {
+      document.getElementById('pageTitle').textContent = 'แก้ไขข้อมูลลูกค้า';
+      document.getElementById('pageDesc').textContent = `รหัส: ${editId}`;
+      document.getElementById('submitBtn').textContent = '💾 อัพเดท';
+      document.getElementById('statusGroup').style.display = 'block';
+      document.getElementById('renewBtn').style.display = 'inline-flex';
+      document.getElementById('inspectionsCard').style.display = 'block';
+      document.getElementById('viewAllInspections').href = `/inspections?customerId=${editId}`;
+      loadCustomer();
+    }
+
+    async function loadCustomer() {
+      try {
+        customerData = await API.get(`/api/customers/${editId}`);
+        const c = customerData;
+
+        document.getElementById('name').value = c.name;
+        document.getElementById('phone').value = c.phone;
+        document.getElementById('address').value = c.address;
+        document.getElementById('buildingType').value = c.buildingType;
+        document.getElementById('jobType').value = c.jobType;
+        document.getElementById('price').value = c.price;
+        document.getElementById('contractStart').value = c.contractStart;
+        document.getElementById('contractEnd').value = c.contractEnd;
+        document.getElementById('warrantyYears').value = c.warrantyYears || '3';
+        document.getElementById('inspectionIntervalMonths').value = c.inspectionIntervalMonths || '4';
+        document.getElementById('status').value = c.status;
+        document.getElementById('notes').value = c.notes;
+
+        calcRounds();
+        renderInspections(c.inspections || []);
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    function renderInspections(inspections) {
+      const tbody = document.getElementById('inspectionsList');
+      if (inspections.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--gray-400)">ไม่มีข้อมูลตรวจเช็ค</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = inspections.map(i => `
+        <tr class="${i.status === 'overdue' ? 'row-overdue' : ''}">
+          <td>รอบ ${i.round}</td>
+          <td>${toThaiDate(i.dueDate)}</td>
+          <td>${i.actualDate ? toThaiDate(i.actualDate) : '-'}</td>
+          <td>${statusBadge(i.status)}</td>
+          <td>${i.technician || '-'}</td>
+          <td>
+            <a href="/inspection-detail?id=${i.id}" class="btn btn-sm btn-outline">รายละเอียด</a>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function calcEndDate() {
+      const start = document.getElementById('contractStart').value;
+      const years = parseInt(document.getElementById('warrantyYears').value);
+      if (start && years) {
+        const d = new Date(start);
+        d.setFullYear(d.getFullYear() + years);
+        document.getElementById('contractEnd').value = d.toISOString().split('T')[0];
+      }
+      calcRounds();
+    }
+
+    function calcRounds() {
+      const years = parseInt(document.getElementById('warrantyYears').value) || 3;
+      const interval = parseInt(document.getElementById('inspectionIntervalMonths').value) || 4;
+      const rounds = Math.floor((years * 12) / interval);
+      document.getElementById('totalRounds').value = `${rounds} รอบ (ทุก ${interval} เดือน)`;
+    }
+
+    async function submitForm(e) {
+      e.preventDefault();
+      const data = {
+        name: document.getElementById('name').value,
+        phone: document.getElementById('phone').value,
+        address: document.getElementById('address').value,
+        buildingType: document.getElementById('buildingType').value,
+        jobType: document.getElementById('jobType').value,
+        price: document.getElementById('price').value,
+        contractStart: document.getElementById('contractStart').value,
+        warrantyYears: document.getElementById('warrantyYears').value,
+        inspectionIntervalMonths: document.getElementById('inspectionIntervalMonths').value,
+        notes: document.getElementById('notes').value,
+      };
+
+      if (editId) {
+        data.status = document.getElementById('status').value;
+      }
+
+      try {
+        if (editId) {
+          await API.put(`/api/customers/${editId}`, data);
+          showToast('อัพเดทข้อมูลเรียบร้อย');
+        } else {
+          const result = await API.post('/api/customers', data);
+          showToast(`เพิ่มลูกค้าเรียบร้อย (สร้าง ${result.inspectionsCreated} รอบตรวจเช็ค)`);
+          setTimeout(() => window.location.href = '/customers', 1500);
+        }
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    function showRenewModal() {
+      showModal('ต่อสัญญา', `
+        <div class="form-group">
+          <label>วันทำสัญญาใหม่ *</label>
+          <input type="date" class="form-control" id="renewStart" value="${todayISO()}">
+        </div>
+        <div class="form-group">
+          <label>รอบรับประกัน (ปี) *</label>
+          <select class="form-control" id="renewYears">
+            <option value="3">3 ปี</option>
+            <option value="5">5 ปี</option>
+            <option value="7">7 ปี</option>
+            <option value="10">10 ปี</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>รอบตรวจเช็ค (เดือน)</label>
+          <select class="form-control" id="renewInterval">
+            <option value="3">ทุก 3 เดือน</option>
+            <option value="4" selected>ทุก 4 เดือน</option>
+            <option value="6">ทุก 6 เดือน</option>
+            <option value="12">ทุก 12 เดือน</option>
+          </select>
+        </div>
+      `, `
+        <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
+        <button class="btn btn-warning" onclick="confirmRenew()">🔄 ยืนยันต่อสัญญา</button>
+      `);
+    }
+
+    async function confirmRenew() {
+      try {
+        const result = await API.post(`/api/customers/${editId}/renew`, {
+          newContractStart: document.getElementById('renewStart').value,
+          warrantyYears: document.getElementById('renewYears').value,
+          inspectionIntervalMonths: document.getElementById('renewInterval').value,
+        });
+        showToast(`ต่อสัญญาเรียบร้อย (สร้าง ${result.inspectionsCreated} รอบตรวจเช็คใหม่)`);
+        closeModal();
+        loadCustomer();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    calcRounds();
+  </script>
+</body>
+</html>

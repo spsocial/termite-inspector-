@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ประวัติแก้ไข - ระบบตรวจเช็คกำจัดปลวก</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .timeline { position: relative; padding-left: 30px; }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 10px;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: var(--gray-200);
+    }
+    .timeline-item {
+      position: relative;
+      margin-bottom: 20px;
+      padding: 16px;
+      background: var(--white);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .timeline-item::before {
+      content: '';
+      position: absolute;
+      left: -25px;
+      top: 20px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--primary-lighter);
+      border: 2px solid var(--white);
+    }
+    .timeline-item.create::before { background: var(--success); }
+    .timeline-item.update::before { background: var(--warning); }
+    .timeline-item.delete::before { background: var(--danger); }
+    .timeline-item.complete::before { background: var(--success); }
+    .timeline-meta {
+      font-size: 12px;
+      color: var(--gray-400);
+      margin-bottom: 8px;
+    }
+    .timeline-action {
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .changes-table {
+      font-size: 13px;
+      margin-top: 8px;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid var(--gray-200);
+    }
+    .changes-table td {
+      padding: 6px 10px;
+      border-bottom: 1px solid var(--gray-100);
+    }
+    .changes-table .field-name { font-weight: 500; background: var(--gray-50); width: 120px; }
+    .from-val { color: var(--danger); text-decoration: line-through; }
+    .to-val { color: var(--success); font-weight: 500; }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <div class="sidebar">
+      <div class="sidebar-header"><h1>🏠 ระบบตรวจปลวก</h1></div>
+      <nav class="sidebar-nav">
+        <a href="/dashboard"><span class="icon">📊</span> แดชบอร์ด</a>
+        <a href="/customers"><span class="icon">👥</span> รายชื่อลูกค้า</a>
+        <a href="/customer-form"><span class="icon">➕</span> เพิ่มลูกค้า</a>
+        <a href="/inspections"><span class="icon">📋</span> ตารางตรวจเช็ค</a>
+        <a href="/history"><span class="icon">📜</span> ประวัติแก้ไข</a>
+        <a href="/settings"><span class="icon">⚙️</span> ตั้งค่า</a>
+      </nav>
+      <div class="sidebar-footer"><a href="#" onclick="logout()"><span>🚪</span> ออกจากระบบ</a></div>
+    </div>
+    <div class="sidebar-overlay"></div>
+    <button class="sidebar-toggle">☰</button>
+
+    <div class="main-content">
+      <div class="page-header">
+        <h2>ประวัติแก้ไข</h2>
+        <p>บันทึกการเปลี่ยนแปลงข้อมูลทั้งหมด</p>
+      </div>
+
+      <div class="filter-bar">
+        <select class="form-control" id="entityFilter" onchange="loadHistory()" style="width:200px;">
+          <option value="">ทั้งหมด</option>
+          <option value="customer">ลูกค้า</option>
+          <option value="inspection">ตรวจเช็ค</option>
+        </select>
+      </div>
+
+      <div class="timeline" id="timeline">
+        <div class="loading"><div class="spinner"></div>กำลังโหลด...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    const actionLabels = {
+      create: '➕ สร้างใหม่',
+      update: '✏️ แก้ไข',
+      delete: '🗑️ ลบ',
+      complete: '✅ ตรวจเสร็จ',
+      renew: '🔄 ต่อสัญญา',
+      'batch-complete': '✅ ตรวจเสร็จหลายรายการ',
+    };
+
+    const entityLabels = {
+      customer: 'ลูกค้า',
+      inspection: 'ตรวจเช็ค',
+    };
+
+    async function loadHistory() {
+      const entity = document.getElementById('entityFilter').value;
+      const el = document.getElementById('timeline');
+      el.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลด...</div>';
+
+      try {
+        let url = '/api/history?limit=100';
+        if (entity) url += `&entity=${entity}`;
+        const logs = await API.get(url);
+
+        if (logs.length === 0) {
+          el.innerHTML = '<div class="empty-state"><div class="icon">📜</div><h3>ยังไม่มีประวัติ</h3></div>';
+          return;
+        }
+
+        el.innerHTML = logs.map(log => {
+          let changesHTML = '';
+          try {
+            const changes = JSON.parse(log.changes);
+            if (typeof changes === 'object' && changes !== null) {
+              // ถ้าเป็น diff (มี from/to)
+              const entries = Object.entries(changes);
+              if (entries.length > 0 && entries[0][1] && typeof entries[0][1] === 'object' && 'from' in entries[0][1]) {
+                changesHTML = `<table class="changes-table"><tbody>
+                  ${entries.map(([key, val]) => `
+                    <tr>
+                      <td class="field-name">${key}</td>
+                      <td><span class="from-val">${val.from || '-'}</span> → <span class="to-val">${val.to || '-'}</span></td>
+                    </tr>
+                  `).join('')}
+                </tbody></table>`;
+              } else {
+                changesHTML = `<pre style="font-size:12px;background:var(--gray-50);padding:8px;border-radius:4px;overflow-x:auto;margin-top:8px;">${JSON.stringify(changes, null, 2)}</pre>`;
+              }
+            }
+          } catch {
+            if (log.changes) {
+              changesHTML = `<div style="font-size:13px;margin-top:4px;color:var(--gray-600)">${log.changes}</div>`;
+            }
+          }
+
+          return `
+            <div class="timeline-item ${log.action}">
+              <div class="timeline-meta">${toThaiDate(log.timestamp)} ${new Date(log.timestamp).toLocaleTimeString('th-TH')}</div>
+              <div class="timeline-action">${actionLabels[log.action] || log.action}</div>
+              <div style="font-size:14px;color:var(--gray-600)">
+                ${entityLabels[log.entity] || log.entity}: <strong>${log.entityId}</strong>
+              </div>
+              ${changesHTML}
+            </div>
+          `;
+        }).join('');
+      } catch (err) {
+        el.innerHTML = `<div class="empty-state"><p>เกิดข้อผิดพลาด: ${err.message}</p></div>`;
+      }
+    }
+
+    loadHistory();
+  </script>
+</body>
+</html>

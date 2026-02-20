@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>รายชื่อลูกค้า - ระบบตรวจเช็คกำจัดปลวก</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <div class="sidebar">
+      <div class="sidebar-header"><h1>🏠 ระบบตรวจปลวก</h1></div>
+      <nav class="sidebar-nav">
+        <a href="/dashboard"><span class="icon">📊</span> แดชบอร์ด</a>
+        <a href="/customers"><span class="icon">👥</span> รายชื่อลูกค้า</a>
+        <a href="/customer-form"><span class="icon">➕</span> เพิ่มลูกค้า</a>
+        <a href="/inspections"><span class="icon">📋</span> ตารางตรวจเช็ค</a>
+        <a href="/history"><span class="icon">📜</span> ประวัติแก้ไข</a>
+        <a href="/settings"><span class="icon">⚙️</span> ตั้งค่า</a>
+      </nav>
+      <div class="sidebar-footer"><a href="#" onclick="logout()"><span>🚪</span> ออกจากระบบ</a></div>
+    </div>
+    <div class="sidebar-overlay"></div>
+    <button class="sidebar-toggle">☰</button>
+
+    <div class="main-content">
+      <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <h2>รายชื่อลูกค้า</h2>
+          <p>จัดการข้อมูลลูกค้าทั้งหมด</p>
+        </div>
+        <a href="/customer-form" class="btn btn-primary">➕ เพิ่มลูกค้า</a>
+      </div>
+
+      <!-- Filter Bar -->
+      <div class="filter-bar">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="searchInput" placeholder="ค้นหาชื่อ, เบอร์โทร, ที่อยู่..." oninput="debounceSearch()">
+        </div>
+        <div class="tabs" style="border:none;margin:0;">
+          <button class="tab active" data-status="all" onclick="filterStatus('all', this)">ทั้งหมด</button>
+          <button class="tab" data-status="active" onclick="filterStatus('active', this)">ใช้งาน</button>
+          <button class="tab" data-status="expired" onclick="filterStatus('expired', this)">หมดสัญญา</button>
+          <button class="tab" data-status="cancelled" onclick="filterStatus('cancelled', this)">ยกเลิก</button>
+        </div>
+      </div>
+
+      <!-- Export Buttons -->
+      <div style="margin-bottom:16px; display:flex; gap:8px;">
+        <button class="btn btn-sm btn-outline" onclick="exportCustomers('excel')">📥 Excel</button>
+        <button class="btn btn-sm btn-outline" onclick="exportCustomers('pdf')">📄 PDF</button>
+      </div>
+
+      <!-- Table -->
+      <div class="card">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>รหัส</th>
+                <th>ชื่อ</th>
+                <th>เบอร์โทร</th>
+                <th>ที่อยู่</th>
+                <th>ลักษณะงาน</th>
+                <th>ราคา</th>
+                <th>หมดสัญญา</th>
+                <th>ตรวจเช็ค</th>
+                <th>สถานะ</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="customerTable">
+              <tr><td colspan="10"><div class="loading"><div class="spinner"></div>กำลังโหลด...</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    let allCustomers = [];
+    let currentStatus = 'all';
+    let searchTimer;
+
+    async function loadCustomers() {
+      try {
+        allCustomers = await API.get('/api/customers');
+        renderTable();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('customerTable');
+      let data = allCustomers;
+
+      if (currentStatus !== 'all') {
+        data = data.filter(c => c.status === currentStatus);
+      }
+
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      if (search) {
+        data = data.filter(c =>
+          c.name.toLowerCase().includes(search) ||
+          c.phone.includes(search) ||
+          c.address.toLowerCase().includes(search) ||
+          c.id.toLowerCase().includes(search)
+        );
+      }
+
+      if (data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="icon">👥</div><h3>ไม่พบข้อมูลลูกค้า</h3></div></td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = data.map(c => {
+        const days = c.daysToExpiry;
+        let rowClass = '';
+        if (c.nextInspection) {
+          const insDays = daysFromNow(c.nextInspection.dueDate);
+          if (insDays !== null && insDays < 0) rowClass = 'row-overdue';
+          else if (insDays !== null && insDays <= 7) rowClass = 'row-warning';
+        }
+
+        return `<tr class="${rowClass}">
+          <td><strong>${c.id}</strong></td>
+          <td>
+            <a href="/customer-form?id=${c.id}" style="color:var(--primary);text-decoration:none;font-weight:600;">
+              ${c.name}
+            </a>
+          </td>
+          <td>${c.phone || '-'}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${c.address}">${c.address || '-'}</td>
+          <td>${c.jobType || '-'}</td>
+          <td>${c.price ? formatPrice(c.price) : '-'}</td>
+          <td>
+            ${toThaiDate(c.contractEnd)}
+            ${days !== null && days <= 30 ? `<br><span class="badge badge-warning">อีก ${days} วัน</span>` : ''}
+          </td>
+          <td>
+            <span class="badge badge-blue">${c.completedInspections}/${c.totalInspections}</span>
+          </td>
+          <td>${statusBadge(c.status)}</td>
+          <td>
+            <a href="/customer-form?id=${c.id}" class="btn btn-sm btn-outline">แก้ไข</a>
+            <a href="/inspections?customerId=${c.id}" class="btn btn-sm btn-outline" style="margin-left:4px;">ตรวจเช็ค</a>
+          </td>
+        </tr>`;
+      }).join('');
+
+      // อัพเดทจำนวนในแท็บ
+      updateTabCounts();
+    }
+
+    function updateTabCounts() {
+      const counts = { all: allCustomers.length };
+      allCustomers.forEach(c => {
+        counts[c.status] = (counts[c.status] || 0) + 1;
+      });
+
+      document.querySelectorAll('.tab[data-status]').forEach(tab => {
+        const status = tab.dataset.status;
+        const count = counts[status] || 0;
+        const existing = tab.querySelector('.count');
+        if (existing) existing.textContent = count;
+        else tab.innerHTML += ` <span class="count">${count}</span>`;
+      });
+    }
+
+    function filterStatus(status, el) {
+      currentStatus = status;
+      document.querySelectorAll('.tab[data-status]').forEach(t => t.classList.remove('active'));
+      el.classList.add('active');
+      renderTable();
+    }
+
+    function debounceSearch() {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(renderTable, 300);
+    }
+
+    function exportCustomers(format) {
+      const status = currentStatus;
+      downloadExport(`/api/export/customers?format=${format}&status=${status}`, `customers.${format === 'pdf' ? 'pdf' : 'xlsx'}`);
+    }
+
+    loadCustomers();
+  </script>
+</body>
+</html>

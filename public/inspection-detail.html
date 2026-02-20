@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>รายละเอียดตรวจเช็ค - ระบบตรวจเช็คกำจัดปลวก</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+    }
+    .detail-item { margin-bottom: 12px; }
+    .detail-item label { font-size: 13px; color: var(--gray-500); display: block; }
+    .detail-item .value { font-size: 15px; font-weight: 500; }
+    .photo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .photo-item {
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--gray-200);
+      aspect-ratio: 1;
+    }
+    .photo-item img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      cursor: pointer;
+    }
+    .upload-area {
+      border: 2px dashed var(--gray-300);
+      border-radius: var(--radius);
+      padding: 30px;
+      text-align: center;
+      color: var(--gray-400);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .upload-area:hover {
+      border-color: var(--primary-light);
+      color: var(--primary-light);
+    }
+    .upload-area.dragover {
+      border-color: var(--primary);
+      background: rgba(45,106,79,0.05);
+    }
+    @media (max-width: 768px) {
+      .detail-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <div class="sidebar">
+      <div class="sidebar-header"><h1>🏠 ระบบตรวจปลวก</h1></div>
+      <nav class="sidebar-nav">
+        <a href="/dashboard"><span class="icon">📊</span> แดชบอร์ด</a>
+        <a href="/customers"><span class="icon">👥</span> รายชื่อลูกค้า</a>
+        <a href="/customer-form"><span class="icon">➕</span> เพิ่มลูกค้า</a>
+        <a href="/inspections"><span class="icon">📋</span> ตารางตรวจเช็ค</a>
+        <a href="/history"><span class="icon">📜</span> ประวัติแก้ไข</a>
+        <a href="/settings"><span class="icon">⚙️</span> ตั้งค่า</a>
+      </nav>
+      <div class="sidebar-footer"><a href="#" onclick="logout()"><span>🚪</span> ออกจากระบบ</a></div>
+    </div>
+    <div class="sidebar-overlay"></div>
+    <button class="sidebar-toggle">☰</button>
+
+    <div class="main-content">
+      <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <h2>รายละเอียดตรวจเช็ค</h2>
+          <p id="pageSubtitle">-</p>
+        </div>
+        <a href="/inspections" class="btn btn-outline">← กลับรายการ</a>
+      </div>
+
+      <div id="content">
+        <div class="loading"><div class="spinner"></div>กำลังโหลด...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    const inspId = getParam('id');
+    let inspData = null;
+
+    async function loadDetail() {
+      if (!inspId) {
+        document.getElementById('content').innerHTML = '<div class="empty-state"><p>ไม่พบรหัสตรวจเช็ค</p></div>';
+        return;
+      }
+
+      try {
+        inspData = await API.get(`/api/inspections/${inspId}`);
+        renderDetail();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    function renderDetail() {
+      const i = inspData;
+      const c = i.customer || {};
+      document.getElementById('pageSubtitle').textContent = `${i.id} - ${c.name || i.customerId}`;
+
+      const photos = i.photos ? i.photos.split(',').filter(Boolean) : [];
+      const isCompleted = i.status === 'completed';
+
+      document.getElementById('content').innerHTML = `
+        <div class="detail-grid">
+          <!-- ข้อมูลลูกค้า -->
+          <div class="card">
+            <div class="card-header"><h3>👤 ข้อมูลลูกค้า</h3></div>
+            <div class="card-body">
+              <div class="detail-item">
+                <label>ชื่อ</label>
+                <div class="value"><a href="/customer-form?id=${i.customerId}" style="color:var(--primary)">${c.name || i.customerId}</a></div>
+              </div>
+              <div class="detail-item">
+                <label>เบอร์โทร</label>
+                <div class="value">${c.phone ? `<a href="tel:${c.phone}" style="color:var(--primary)">${c.phone}</a>` : '-'}</div>
+              </div>
+              <div class="detail-item">
+                <label>ที่อยู่</label>
+                <div class="value">${c.address || '-'}</div>
+              </div>
+              <div class="detail-item">
+                <label>ลักษณะอาคาร</label>
+                <div class="value">${c.buildingType || '-'}</div>
+              </div>
+              <div class="detail-item">
+                <label>ลักษณะงาน</label>
+                <div class="value">${c.jobType || '-'}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- สถานะตรวจเช็ค -->
+          <div class="card">
+            <div class="card-header"><h3>📋 สถานะตรวจเช็ค</h3></div>
+            <div class="card-body">
+              <div class="detail-item">
+                <label>รหัส</label>
+                <div class="value">${i.id}</div>
+              </div>
+              <div class="detail-item">
+                <label>รอบที่</label>
+                <div class="value">${i.round}</div>
+              </div>
+              <div class="detail-item">
+                <label>วันกำหนด</label>
+                <div class="value">${toThaiDate(i.dueDate)} ${!isCompleted ? daysLabel(daysFromNow(i.dueDate)) : ''}</div>
+              </div>
+              <div class="detail-item">
+                <label>วันตรวจจริง</label>
+                <div class="value">${i.actualDate ? toThaiDate(i.actualDate) : '-'}</div>
+              </div>
+              <div class="detail-item">
+                <label>สถานะ</label>
+                <div class="value">${statusBadge(i.status)}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ฟอร์มบันทึกผล -->
+        <div class="card" style="margin-top:20px;">
+          <div class="card-header">
+            <h3>📝 บันทึกผลตรวจ</h3>
+            ${!isCompleted ? `<button class="btn btn-success" onclick="markComplete()">✓ บันทึกเสร็จสิ้น</button>` : ''}
+          </div>
+          <div class="card-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label>ช่างผู้ตรวจ</label>
+                <input type="text" class="form-control" id="technician" value="${i.technician || ''}" ${isCompleted ? '' : ''}>
+              </div>
+            </div>
+            <div class="form-group">
+              <label>ผลการตรวจ</label>
+              <textarea class="form-control" id="result" rows="3">${i.result || ''}</textarea>
+            </div>
+            <button class="btn btn-primary" onclick="saveDetails()">💾 บันทึกข้อมูล</button>
+          </div>
+        </div>
+
+        <!-- รูปถ่าย -->
+        <div class="card" style="margin-top:20px;">
+          <div class="card-header"><h3>📷 รูปถ่ายหลักฐาน</h3></div>
+          <div class="card-body">
+            <div class="upload-area" id="uploadArea" onclick="document.getElementById('photoInput').click()">
+              <div style="font-size:36px;margin-bottom:8px;">📷</div>
+              <p>คลิกเพื่ออัพโหลดรูป หรือลากไฟล์มาวาง</p>
+              <p style="font-size:12px;margin-top:4px;">รองรับ JPG, PNG (สูงสุด 10MB ต่อรูป)</p>
+            </div>
+            <input type="file" id="photoInput" multiple accept="image/*" capture="environment" style="display:none" onchange="uploadPhotos(this.files)">
+
+            <div class="photo-grid" id="photoGrid">
+              ${photos.map(p => `
+                <div class="photo-item">
+                  <img src="${p}" onclick="window.open('${p}', '_blank')" alt="รูปถ่าย" loading="lazy"
+                       onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22150%22 height=%22150%22><text x=%2240%22 y=%2280%22 font-size=%2240%22>📷</text></svg>'">
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+
+      // Drag & drop
+      const area = document.getElementById('uploadArea');
+      area.addEventListener('dragover', (e) => { e.preventDefault(); area.classList.add('dragover'); });
+      area.addEventListener('dragleave', () => area.classList.remove('dragover'));
+      area.addEventListener('drop', (e) => {
+        e.preventDefault();
+        area.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) uploadPhotos(e.dataTransfer.files);
+      });
+    }
+
+    async function saveDetails() {
+      try {
+        await API.put(`/api/inspections/${inspId}`, {
+          technician: document.getElementById('technician').value,
+          result: document.getElementById('result').value,
+        });
+        showToast('บันทึกข้อมูลเรียบร้อย');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function markComplete() {
+      try {
+        await API.put(`/api/inspections/${inspId}/complete`, {
+          technician: document.getElementById('technician').value,
+          result: document.getElementById('result').value,
+        });
+        showToast('บันทึกเสร็จสิ้นเรียบร้อย');
+        loadDetail();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function uploadPhotos(files) {
+      if (!files || files.length === 0) return;
+
+      const formData = new FormData();
+      for (const file of files) {
+        formData.append('photos', file);
+      }
+
+      try {
+        showToast('กำลังอัพโหลด...', 'warning');
+        await API.upload(`/api/inspections/${inspId}/photos`, formData);
+        showToast('อัพโหลดรูปเรียบร้อย');
+        loadDetail();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    loadDetail();
+  </script>
+</body>
+</html>
