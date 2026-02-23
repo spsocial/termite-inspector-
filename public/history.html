@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ประวัติแก้ไข - ระบบตรวจเช็คกำจัดปลวก</title>
+  <title>ประวัติแก้ไข - ลูกค้าปลวก</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
   <style>
@@ -68,14 +68,14 @@
 <body>
   <div class="app-layout">
     <div class="sidebar">
-      <div class="sidebar-header"><h1>🏠 ระบบตรวจปลวก</h1></div>
+      <div class="sidebar-header"><h1>🏠 ลูกค้าปลวก</h1><span id="roleBadge" class="badge badge-success" style="margin-top:6px;">Admin</span></div>
       <nav class="sidebar-nav">
         <a href="/dashboard"><span class="icon">📊</span> แดชบอร์ด</a>
-        <a href="/customers"><span class="icon">👥</span> รายชื่อลูกค้า</a>
-        <a href="/customer-form"><span class="icon">➕</span> เพิ่มลูกค้า</a>
+        <a href="/customers" data-admin-only><span class="icon">👥</span> รายชื่อลูกค้า</a>
+        <a href="/customer-form" data-admin-only><span class="icon">➕</span> เพิ่มลูกค้า</a>
         <a href="/inspections"><span class="icon">📋</span> ตารางตรวจเช็ค</a>
-        <a href="/history"><span class="icon">📜</span> ประวัติแก้ไข</a>
-        <a href="/settings"><span class="icon">⚙️</span> ตั้งค่า</a>
+        <a href="/history" data-admin-only><span class="icon">📜</span> ประวัติแก้ไข</a>
+        <a href="/settings" data-admin-only><span class="icon">⚙️</span> ตั้งค่า</a>
       </nav>
       <div class="sidebar-footer"><a href="#" onclick="logout()"><span>🚪</span> ออกจากระบบ</a></div>
     </div>

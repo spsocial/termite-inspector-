@@ -3,21 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>รายชื่อลูกค้า - ระบบตรวจเช็คกำจัดปลวก</title>
+  <title>รายชื่อลูกค้า - ลูกค้าปลวก</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
   <div class="app-layout">
     <div class="sidebar">
-      <div class="sidebar-header"><h1>🏠 ระบบตรวจปลวก</h1></div>
+      <div class="sidebar-header"><h1>🏠 ลูกค้าปลวก</h1><span id="roleBadge" class="badge badge-success" style="margin-top:6px;">Admin</span></div>
       <nav class="sidebar-nav">
         <a href="/dashboard"><span class="icon">📊</span> แดชบอร์ด</a>
-        <a href="/customers"><span class="icon">👥</span> รายชื่อลูกค้า</a>
-        <a href="/customer-form"><span class="icon">➕</span> เพิ่มลูกค้า</a>
+        <a href="/customers" data-admin-only><span class="icon">👥</span> รายชื่อลูกค้า</a>
+        <a href="/customer-form" data-admin-only><span class="icon">➕</span> เพิ่มลูกค้า</a>
         <a href="/inspections"><span class="icon">📋</span> ตารางตรวจเช็ค</a>
-        <a href="/history"><span class="icon">📜</span> ประวัติแก้ไข</a>
-        <a href="/settings"><span class="icon">⚙️</span> ตั้งค่า</a>
+        <a href="/history" data-admin-only><span class="icon">📜</span> ประวัติแก้ไข</a>
+        <a href="/settings" data-admin-only><span class="icon">⚙️</span> ตั้งค่า</a>
       </nav>
       <div class="sidebar-footer"><a href="#" onclick="logout()"><span>🚪</span> ออกจากระบบ</a></div>
     </div>
@@ -48,7 +48,7 @@
       </div>
 
       <!-- Export Buttons -->
-      <div style="margin-bottom:16px; display:flex; gap:8px;">
+      <div style="margin-bottom:16px; display:flex; gap:8px;" data-admin-only>
         <button class="btn btn-sm btn-outline" onclick="exportCustomers('excel')">📥 Excel</button>
         <button class="btn btn-sm btn-outline" onclick="exportCustomers('pdf')">📄 PDF</button>
       </div>
@@ -63,8 +63,9 @@
                 <th>ชื่อ</th>
                 <th>เบอร์โทร</th>
                 <th>ที่อยู่</th>
+                <th>พื้นที่(ตร.ม.)</th>
                 <th>ลักษณะงาน</th>
-                <th>ราคา</th>
+                <th class="col-price" data-tech-hide>ราคา</th>
                 <th>หมดสัญญา</th>
                 <th>ตรวจเช็ค</th>
                 <th>สถานะ</th>
@@ -72,7 +73,7 @@
               </tr>
             </thead>
             <tbody id="customerTable">
-              <tr><td colspan="10"><div class="loading"><div class="spinner"></div>กำลังโหลด...</div></td></tr>
+              <tr><td colspan="11"><div class="loading"><div class="spinner"></div>กำลังโหลด...</div></td></tr>
             </tbody>
           </table>
         </div>
@@ -114,9 +115,11 @@
       }
 
       if (data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="icon">👥</div><h3>ไม่พบข้อมูลลูกค้า</h3></div></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state"><div class="icon">👥</div><h3>ไม่พบข้อมูลลูกค้า</h3></div></td></tr>';
         return;
       }
+
+      const showPrice = isAdmin();
 
       tbody.innerHTML = data.map(c => {
         const days = c.daysToExpiry;
@@ -136,8 +139,9 @@
           </td>
           <td>${c.phone || '-'}</td>
           <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${c.address}">${c.address || '-'}</td>
+          <td>${c.area || '-'}</td>
           <td>${c.jobType || '-'}</td>
-          <td>${c.price ? formatPrice(c.price) : '-'}</td>
+          ${showPrice ? `<td>${c.price ? formatPrice(c.price) : '-'}</td>` : ''}
           <td>
             ${toThaiDate(c.contractEnd)}
             ${days !== null && days <= 30 ? `<br><span class="badge badge-warning">อีก ${days} วัน</span>` : ''}

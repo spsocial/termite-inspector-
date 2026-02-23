@@ -1,3 +1,50 @@
+// ==================== Role Management ====================
+let currentRole = localStorage.getItem('userRole') || 'admin';
+
+function isAdmin() { return currentRole === 'admin'; }
+function isTechnician() { return currentRole === 'technician'; }
+
+// โหลด role จาก server
+async function loadRole() {
+  try {
+    const data = await API.get('/api/auth/me');
+    currentRole = data.role;
+    localStorage.setItem('userRole', currentRole);
+    applySidebarRole();
+    return currentRole;
+  } catch {
+    return currentRole;
+  }
+}
+
+// ซ่อน/แสดง menu ตาม role
+function applySidebarRole() {
+  document.querySelectorAll('[data-admin-only]').forEach(el => {
+    el.style.display = isAdmin() ? '' : 'none';
+  });
+  document.querySelectorAll('[data-tech-hide]').forEach(el => {
+    el.style.display = isAdmin() ? '' : 'none';
+  });
+
+  // แสดงป้าย role ใน sidebar
+  const badge = document.getElementById('roleBadge');
+  if (badge) {
+    badge.textContent = isAdmin() ? 'Admin' : 'ช่าง';
+    badge.className = isAdmin() ? 'badge badge-success' : 'badge badge-blue';
+  }
+}
+
+// เช็คว่าช่างพยายามเข้าหน้า admin-only
+function checkAdminPage() {
+  const adminPages = ['customers', 'customer-form', 'history', 'settings'];
+  const currentPage = window.location.pathname.replace('/', '').replace('.html', '');
+  if (adminPages.includes(currentPage) && isTechnician()) {
+    window.location.href = '/dashboard';
+    return false;
+  }
+  return true;
+}
+
 // ==================== API Helper ====================
 const API = {
   async request(url, options = {}) {
@@ -6,7 +53,6 @@ const API = {
       ...options,
     };
 
-    // ถ้าเป็น FormData ไม่ต้องใส่ Content-Type
     if (options.body instanceof FormData) {
       delete defaultOptions.headers['Content-Type'];
     }
@@ -15,11 +61,16 @@ const API = {
       const res = await fetch(url, defaultOptions);
 
       if (res.status === 401) {
+        localStorage.removeItem('userRole');
         window.location.href = '/';
         return null;
       }
 
-      // ถ้าเป็นไฟล์ (export)
+      if (res.status === 403) {
+        showToast('ไม่มีสิทธิ์เข้าถึง (เฉพาะ Admin)', 'error');
+        return null;
+      }
+
       const contentType = res.headers.get('Content-Type') || '';
       if (contentType.includes('spreadsheet') || contentType.includes('pdf')) {
         if (!res.ok) throw new Error('Export failed');
@@ -162,11 +213,13 @@ function initSidebar() {
       overlay.classList.remove('open');
     });
   }
+
+  // โหลด role แล้วปรับ sidebar
+  loadRole();
 }
 
 // ==================== Modal Helper ====================
 function showModal(title, bodyHTML, footerHTML) {
-  // ลบ modal เก่า
   document.querySelectorAll('.modal-backdrop').forEach(m => m.remove());
 
   const modal = document.createElement('div');
@@ -183,7 +236,6 @@ function showModal(title, bodyHTML, footerHTML) {
   `;
   document.body.appendChild(modal);
 
-  // ปิดเมื่อคลิก backdrop
   modal.addEventListener('click', (e) => {
     if (e.target === modal) modal.remove();
   });
@@ -220,32 +272,10 @@ async function downloadExport(url, filename) {
   }
 }
 
-// ==================== Sidebar HTML Template ====================
-function getSidebarHTML() {
-  return `
-    <div class="sidebar">
-      <div class="sidebar-header">
-        <h1>🏠 ระบบตรวจปลวก</h1>
-      </div>
-      <nav class="sidebar-nav">
-        <a href="/dashboard"><span class="icon">📊</span> แดชบอร์ด</a>
-        <a href="/customers"><span class="icon">👥</span> รายชื่อลูกค้า</a>
-        <a href="/customer-form"><span class="icon">➕</span> เพิ่มลูกค้า</a>
-        <a href="/inspections"><span class="icon">📋</span> ตารางตรวจเช็ค</a>
-        <a href="/history"><span class="icon">📜</span> ประวัติแก้ไข</a>
-        <a href="/settings"><span class="icon">⚙️</span> ตั้งค่า</a>
-      </nav>
-      <div class="sidebar-footer">
-        <a href="#" onclick="logout()"><span>🚪</span> ออกจากระบบ</a>
-      </div>
-    </div>
-    <div class="sidebar-overlay"></div>
-    <button class="sidebar-toggle">☰</button>
-  `;
-}
-
+// ==================== Logout ====================
 async function logout() {
   await API.post('/api/auth/logout');
+  localStorage.removeItem('userRole');
   window.location.href = '/';
 }
 
@@ -257,4 +287,5 @@ function getParam(name) {
 // ==================== Init ====================
 document.addEventListener('DOMContentLoaded', () => {
   initSidebar();
+  checkAdminPage();
 });

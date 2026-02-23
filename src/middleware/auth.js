@@ -28,4 +28,20 @@ function authMiddleware(req, res, next) {
   }
 }
 
-module.exports = authMiddleware;
+// Middleware สำหรับหน้าที่ admin เท่านั้น
+function adminOnly(req, res, next) {
+  if (!req.user || req.user.role !== 'admin') {
+    if (req.path.startsWith('/api/')) {
+      return res.status(403).json({ error: 'ไม่มีสิทธิ์เข้าถึง (เฉพาะ Admin)' });
+    }
+    return res.redirect('/dashboard');
+  }
+  next();
+}
+
+// GET /api/auth/me - ดึงข้อมูล role ปัจจุบัน
+function getMeHandler(req, res) {
+  res.json({ role: req.user?.role || 'unknown' });
+}
+
+module.exports = { authMiddleware, adminOnly, getMeHandler };

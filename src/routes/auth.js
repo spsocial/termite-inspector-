@@ -11,12 +11,20 @@ router.post('/login', (req, res) => {
     return res.status(400).json({ error: 'กรุณาใส่ PIN' });
   }
 
-  if (pin !== config.appPin) {
+  // ตรวจสอบ PIN: admin หรือ ช่าง
+  let role = null;
+  if (pin === config.appPin) {
+    role = 'admin';
+  } else if (pin === config.techPin) {
+    role = 'technician';
+  }
+
+  if (!role) {
     return res.status(401).json({ error: 'PIN ไม่ถูกต้อง' });
   }
 
   const token = jwt.sign(
-    { role: 'team', loginAt: new Date().toISOString() },
+    { role, loginAt: new Date().toISOString() },
     config.jwtSecret,
     { expiresIn: '30d' }
   );
@@ -28,7 +36,7 @@ router.post('/login', (req, res) => {
     maxAge: 30 * 24 * 60 * 60 * 1000,
   });
 
-  res.json({ success: true, token });
+  res.json({ success: true, token, role });
 });
 
 router.post('/logout', (req, res) => {

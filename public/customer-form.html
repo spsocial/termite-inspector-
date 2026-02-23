@@ -3,21 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ฟอร์มลูกค้า - ระบบตรวจเช็คกำจัดปลวก</title>
+  <title>ฟอร์มลูกค้า - ลูกค้าปลวก</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
   <div class="app-layout">
     <div class="sidebar">
-      <div class="sidebar-header"><h1>🏠 ระบบตรวจปลวก</h1></div>
+      <div class="sidebar-header"><h1>🏠 ลูกค้าปลวก</h1><span id="roleBadge" class="badge badge-success" style="margin-top:6px;">Admin</span></div>
       <nav class="sidebar-nav">
         <a href="/dashboard"><span class="icon">📊</span> แดชบอร์ด</a>
-        <a href="/customers"><span class="icon">👥</span> รายชื่อลูกค้า</a>
-        <a href="/customer-form"><span class="icon">➕</span> เพิ่มลูกค้า</a>
+        <a href="/customers" data-admin-only><span class="icon">👥</span> รายชื่อลูกค้า</a>
+        <a href="/customer-form" data-admin-only><span class="icon">➕</span> เพิ่มลูกค้า</a>
         <a href="/inspections"><span class="icon">📋</span> ตารางตรวจเช็ค</a>
-        <a href="/history"><span class="icon">📜</span> ประวัติแก้ไข</a>
-        <a href="/settings"><span class="icon">⚙️</span> ตั้งค่า</a>
+        <a href="/history" data-admin-only><span class="icon">📜</span> ประวัติแก้ไข</a>
+        <a href="/settings" data-admin-only><span class="icon">⚙️</span> ตั้งค่า</a>
       </nav>
       <div class="sidebar-footer"><a href="#" onclick="logout()"><span>🚪</span> ออกจากระบบ</a></div>
     </div>
@@ -82,9 +82,16 @@
 
             <div class="form-row">
               <div class="form-group">
+                <label>พื้นที่ (ตร.ม.)</label>
+                <input type="number" class="form-control" id="area" placeholder="0" step="0.01">
+              </div>
+              <div class="form-group">
                 <label>ราคา (บาท)</label>
                 <input type="number" class="form-control" id="price" placeholder="0">
               </div>
+            </div>
+
+            <div class="form-row">
               <div class="form-group">
                 <label>วันทำสัญญา *</label>
                 <input type="date" class="form-control" id="contractStart" required onchange="calcEndDate()">
@@ -93,12 +100,12 @@
 
             <div class="form-row">
               <div class="form-group">
-                <label>รอบรับประกัน (ปี) *</label>
-                <select class="form-control" id="warrantyYears" required onchange="calcEndDate()">
-                  <option value="3">3 ปี</option>
-                  <option value="5">5 ปี</option>
-                  <option value="7">7 ปี</option>
-                  <option value="10">10 ปี</option>
+                <label>รอบรับประกัน (ปี)</label>
+                <select class="form-control" id="warrantyYears" onchange="calcEndDate()">
+                  <option value="0">ไม่รับประกัน</option>
+                  <option value="1">1 ปี</option>
+                  <option value="2">2 ปี</option>
+                  <option value="3" selected>3 ปี</option>
                 </select>
               </div>
               <div class="form-group">
@@ -199,6 +206,7 @@
         document.getElementById('phone').value = c.phone;
         document.getElementById('address').value = c.address;
         document.getElementById('buildingType').value = c.buildingType;
+        document.getElementById('area').value = c.area;
         document.getElementById('jobType').value = c.jobType;
         document.getElementById('price').value = c.price;
         document.getElementById('contractStart').value = c.contractStart;
@@ -239,7 +247,10 @@
     function calcEndDate() {
       const start = document.getElementById('contractStart').value;
       const years = parseInt(document.getElementById('warrantyYears').value);
-      if (start && years) {
+      if (years === 0) {
+        document.getElementById('contractEnd').value = '';
+        document.getElementById('contractEnd').placeholder = 'ไม่รับประกัน';
+      } else if (start && years) {
         const d = new Date(start);
         d.setFullYear(d.getFullYear() + years);
         document.getElementById('contractEnd').value = d.toISOString().split('T')[0];
@@ -248,8 +259,12 @@
     }
 
     function calcRounds() {
-      const years = parseInt(document.getElementById('warrantyYears').value) || 3;
+      const years = parseInt(document.getElementById('warrantyYears').value) || 0;
       const interval = parseInt(document.getElementById('inspectionIntervalMonths').value) || 4;
+      if (years === 0) {
+        document.getElementById('totalRounds').value = 'ไม่มี (ไม่รับประกัน)';
+        return;
+      }
       const rounds = Math.floor((years * 12) / interval);
       document.getElementById('totalRounds').value = `${rounds} รอบ (ทุก ${interval} เดือน)`;
     }
@@ -261,6 +276,7 @@
         phone: document.getElementById('phone').value,
         address: document.getElementById('address').value,
         buildingType: document.getElementById('buildingType').value,
+        area: document.getElementById('area').value,
         jobType: document.getElementById('jobType').value,
         price: document.getElementById('price').value,
         contractStart: document.getElementById('contractStart').value,
@@ -296,10 +312,10 @@
         <div class="form-group">
           <label>รอบรับประกัน (ปี) *</label>
           <select class="form-control" id="renewYears">
-            <option value="3">3 ปี</option>
-            <option value="5">5 ปี</option>
-            <option value="7">7 ปี</option>
-            <option value="10">10 ปี</option>
+            <option value="0">ไม่รับประกัน</option>
+            <option value="1">1 ปี</option>
+            <option value="2">2 ปี</option>
+            <option value="3" selected>3 ปี</option>
           </select>
         </div>
         <div class="form-group">

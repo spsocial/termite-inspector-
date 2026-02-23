@@ -91,6 +91,7 @@ async function exportCustomersExcel(res, customers) {
     { header: 'เบอร์โทร', key: 'phone', width: 15 },
     { header: 'ที่อยู่', key: 'address', width: 35 },
     { header: 'ลักษณะอาคาร', key: 'building', width: 20 },
+    { header: 'พื้นที่(ตร.ม.)', key: 'area', width: 14 },
     { header: 'ลักษณะงาน', key: 'job', width: 20 },
     { header: 'ราคา', key: 'price', width: 12 },
     { header: 'วันทำสัญญา', key: 'start', width: 15 },
@@ -105,11 +106,12 @@ async function exportCustomersExcel(res, customers) {
   });
 
   customers.forEach(r => {
+    const statusMap = { active: 'ใช้งาน', expired: 'หมดสัญญา', cancelled: 'ยกเลิก' };
     ws.addRow({
       id: r[0], name: r[1], phone: r[2], address: r[3],
-      building: r[4], job: r[5], price: r[6],
-      start: toThaiDisplay(r[7]), end: toThaiDisplay(r[8]),
-      status: r[11] === 'active' ? 'ใช้งาน' : r[11] === 'expired' ? 'หมดสัญญา' : 'ยกเลิก',
+      building: r[4], area: r[5], job: r[6], price: r[7],
+      start: toThaiDisplay(r[8]), end: r[9] ? toThaiDisplay(r[9]) : 'ไม่รับประกัน',
+      status: statusMap[r[12]] || r[12],
     });
   });
 
@@ -156,7 +158,7 @@ function exportCustomersPDF(res, customers) {
     x = 30;
     const bgColor = rowIdx % 2 === 0 ? '#FFFFFF' : '#F3F4F6';
     const statusMap = { active: 'ใช้งาน', expired: 'หมดสัญญา', cancelled: 'ยกเลิก' };
-    const vals = [r[0], r[1], r[2], r[3], r[5], r[6], toThaiDisplay(r[8]), statusMap[r[11]] || r[11]];
+    const vals = [r[0], r[1], r[2], r[3], r[6], r[7], r[9] ? toThaiDisplay(r[9]) : 'ไม่รับประกัน', statusMap[r[12]] || r[12]];
 
     vals.forEach((v, i) => {
       doc.rect(x, y, colWidths[i], 18).fill(bgColor);
@@ -235,9 +237,10 @@ function exportCustomerReportPDF(res, custRow, inspections) {
   const info = [
     ['รหัส', custRow[0]], ['ชื่อ', custRow[1]],
     ['เบอร์โทร', custRow[2]], ['ที่อยู่', custRow[3]],
-    ['ลักษณะอาคาร', custRow[4]], ['ลักษณะงาน', custRow[5]],
-    ['ราคา', custRow[6]], ['วันทำสัญญา', toThaiDisplay(custRow[7])],
-    ['วันหมดสัญญา', toThaiDisplay(custRow[8])],
+    ['ลักษณะอาคาร', custRow[4]], ['พื้นที่(ตร.ม.)', custRow[5]],
+    ['ลักษณะงาน', custRow[6]], ['ราคา', custRow[7]],
+    ['วันทำสัญญา', toThaiDisplay(custRow[8])],
+    ['วันหมดสัญญา', custRow[9] ? toThaiDisplay(custRow[9]) : 'ไม่รับประกัน'],
   ];
 
   info.forEach(([label, value]) => {

@@ -2,7 +2,7 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const config = require('./src/config');
-const authMiddleware = require('./src/middleware/auth');
+const { authMiddleware, adminOnly, getMeHandler } = require('./src/middleware/auth');
 
 const app = express();
 
@@ -27,16 +27,19 @@ app.use((req, res, next) => {
   return authMiddleware(req, res, next);
 });
 
-// API Routes
+// API Routes - ทุกคนเข้าถึงได้
 app.use('/api/auth', require('./src/routes/auth'));
-app.use('/api/customers', require('./src/routes/customers'));
+app.get('/api/auth/me', getMeHandler);
 app.use('/api/inspections', require('./src/routes/inspections'));
 app.use('/api/dashboard', require('./src/routes/dashboard'));
-app.use('/api/export', require('./src/routes/export'));
-app.use('/api/history', require('./src/routes/history'));
 
-// Telegram test endpoint
-app.post('/api/telegram/test', async (req, res) => {
+// API Routes - เฉพาะ Admin เท่านั้น
+app.use('/api/customers', adminOnly, require('./src/routes/customers'));
+app.use('/api/export', adminOnly, require('./src/routes/export'));
+app.use('/api/history', adminOnly, require('./src/routes/history'));
+
+// Telegram test endpoint (admin only)
+app.post('/api/telegram/test', adminOnly, async (req, res) => {
   try {
     const telegram = require('./src/services/telegram');
     const result = await telegram.sendMessage('🧪 ทดสอบการแจ้งเตือน - ระบบทำงานปกติ');
@@ -46,8 +49,8 @@ app.post('/api/telegram/test', async (req, res) => {
   }
 });
 
-// Trigger daily summary manually
-app.post('/api/telegram/daily-summary', async (req, res) => {
+// Trigger daily summary manually (admin only)
+app.post('/api/telegram/daily-summary', adminOnly, async (req, res) => {
   try {
     const { sendDailySummary } = require('./src/services/cronJobs');
     await sendDailySummary();

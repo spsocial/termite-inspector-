@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>เข้าสู่ระบบ - ระบบตรวจเช็คกำจัดปลวก</title>
+  <title>เข้าสู่ระบบ - ลูกค้าปลวก</title>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -147,7 +147,7 @@
 <body>
   <div class="login-card">
     <div class="logo">🏠</div>
-    <h1>ระบบตรวจเช็คกำจัดปลวก</h1>
+    <h1>ลูกค้าปลวก</h1>
     <p class="subtitle">ใส่รหัส PIN เพื่อเข้าสู่ระบบ</p>
 
     <div class="pin-display" id="pinDisplay">
@@ -227,6 +227,7 @@
         const data = await res.json();
 
         if (data.success) {
+          localStorage.setItem('userRole', data.role);
           window.location.href = '/dashboard';
         } else {
           showError(data.error || 'PIN ไม่ถูกต้อง');

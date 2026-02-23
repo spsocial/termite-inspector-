@@ -6,7 +6,12 @@ const { toISO, addYears, addMonths, nowISO, daysBetween, today } = require('../u
 
 const router = express.Router();
 
-// แปลงแถว Google Sheets → object ลูกค้า
+// คอลัมน์ลูกค้า (เพิ่ม พื้นที่ตร.ม. ที่ index 5)
+// 0:รหัส 1:ชื่อ 2:เบอร์โทร 3:ที่อยู่ 4:ลักษณะอาคาร 5:พื้นที่(ตร.ม.)
+// 6:ลักษณะงาน 7:ราคา 8:วันทำสัญญา 9:วันหมดสัญญา
+// 10:รอบรับประกัน(ปี) 11:รอบตรวจเช็ค(เดือน) 12:สถานะ 13:หมายเหตุ
+// 14:created_at 15:updated_at
+
 function rowToCustomer(row, index) {
   return {
     id: row[0] || '',
@@ -14,17 +19,18 @@ function rowToCustomer(row, index) {
     phone: row[2] || '',
     address: row[3] || '',
     buildingType: row[4] || '',
-    jobType: row[5] || '',
-    price: row[6] || '',
-    contractStart: row[7] || '',
-    contractEnd: row[8] || '',
-    warrantyYears: row[9] || '',
-    inspectionIntervalMonths: row[10] || '',
-    status: row[11] || 'active',
-    notes: row[12] || '',
-    createdAt: row[13] || '',
-    updatedAt: row[14] || '',
-    _rowIndex: index + 1, // 1-based สำหรับ Sheets API
+    area: row[5] || '',
+    jobType: row[6] || '',
+    price: row[7] || '',
+    contractStart: row[8] || '',
+    contractEnd: row[9] || '',
+    warrantyYears: row[10] || '',
+    inspectionIntervalMonths: row[11] || '',
+    status: row[12] || 'active',
+    notes: row[13] || '',
+    createdAt: row[14] || '',
+    updatedAt: row[15] || '',
+    _rowIndex: index + 1,
   };
 }
 
@@ -36,12 +42,10 @@ router.get('/', async (req, res) => {
 
     let customers = rows.slice(1).map((row, i) => rowToCustomer(row, i + 1));
 
-    // กรองตาม status
     if (req.query.status && req.query.status !== 'all') {
       customers = customers.filter(c => c.status === req.query.status);
     }
 
-    // ค้นหา universal
     if (req.query.search) {
       const q = req.query.search.toLowerCase();
       customers = customers.filter(c =>
@@ -52,7 +56,6 @@ router.get('/', async (req, res) => {
       );
     }
 
-    // เพิ่มข้อมูลสถานะตรวจเช็ค
     const inspRows = await sheets.getRows(config.sheets.inspections);
     const now = today();
 
@@ -60,11 +63,7 @@ router.get('/', async (req, res) => {
       const custInspections = inspRows.slice(1)
         .filter(r => r[1] === c.id)
         .map(r => ({
-          id: r[0],
-          round: r[2],
-          dueDate: r[3],
-          actualDate: r[4],
-          status: r[5],
+          id: r[0], round: r[2], dueDate: r[3], actualDate: r[4], status: r[5],
         }));
 
       const nextPending = custInspections
@@ -100,19 +99,12 @@ router.get('/:id', async (req, res) => {
     const index = rows.indexOf(row);
     const customer = rowToCustomer(row, index);
 
-    // ดึงรายการตรวจเช็คของลูกค้า
     const inspRows = await sheets.getRows(config.sheets.inspections);
     customer.inspections = inspRows.slice(1)
       .filter(r => r[1] === customer.id)
       .map(r => ({
-        id: r[0],
-        round: r[2],
-        dueDate: r[3],
-        actualDate: r[4],
-        status: r[5],
-        result: r[6],
-        technician: r[7],
-        photos: r[8],
+        id: r[0], round: r[2], dueDate: r[3], actualDate: r[4],
+        status: r[5], result: r[6], technician: r[7], photos: r[8],
       }));
 
     res.json(customer);
@@ -126,52 +118,55 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const {
-      name, phone, address, buildingType, jobType, price,
+      name, phone, address, buildingType, area, jobType, price,
       contractStart, warrantyYears, inspectionIntervalMonths, notes,
     } = req.body;
 
-    if (!name || !contractStart || !warrantyYears) {
-      return res.status(400).json({ error: 'กรุณากรอกข้อมูลที่จำเป็น' });
+    if (!name || !contractStart) {
+      return res.status(400).json({ error: 'กรุณากรอกชื่อและวันทำสัญญา' });
     }
 
     const id = await sheets.generateId(config.sheets.customers, 'C');
-    const contractEnd = toISO(addYears(contractStart, parseInt(warrantyYears)));
+    const warranty = parseInt(warrantyYears) || 0;
+    const contractEnd = warranty > 0 ? toISO(addYears(contractStart, warranty)) : '';
     const now = nowISO();
 
     const customerRow = [
       id, name, phone || '', address || '', buildingType || '',
-      jobType || '', price || '', contractStart, contractEnd,
-      warrantyYears, inspectionIntervalMonths || '4',
+      area || '', jobType || '', price || '', contractStart, contractEnd,
+      warrantyYears || '0', inspectionIntervalMonths || '4',
       'active', notes || '', now, now,
     ];
 
     await sheets.appendRow(config.sheets.customers, customerRow);
 
-    // สร้างตารางตรวจเช็คอัตโนมัติ
-    const interval = parseInt(inspectionIntervalMonths) || 4;
-    const totalRounds = Math.floor((parseInt(warrantyYears) * 12) / interval);
-    const inspectionRows = [];
+    // สร้างตารางตรวจเช็คอัตโนมัติ (เฉพาะกรณีมีรับประกัน)
+    let inspectionsCreated = 0;
+    if (warranty > 0) {
+      const interval = parseInt(inspectionIntervalMonths) || 4;
+      const totalRounds = Math.floor((warranty * 12) / interval);
+      const inspectionRows = [];
 
-    for (let i = 1; i <= totalRounds; i++) {
-      const insId = await sheets.generateId(config.sheets.inspections, 'INS');
-      const dueDate = toISO(addMonths(contractStart, i * interval));
+      for (let i = 1; i <= totalRounds; i++) {
+        const insId = await sheets.generateId(config.sheets.inspections, 'INS');
+        const dueDate = toISO(addMonths(contractStart, i * interval));
+        inspectionRows.push([
+          insId, id, String(i), dueDate, '', 'pending', '', '', '', now, now,
+        ]);
+      }
 
-      inspectionRows.push([
-        insId, id, String(i), dueDate, '', 'pending',
-        '', '', '', now, now,
-      ]);
+      if (inspectionRows.length > 0) {
+        await sheets.appendRows(config.sheets.inspections, inspectionRows);
+        inspectionsCreated = inspectionRows.length;
+      }
     }
 
-    if (inspectionRows.length > 0) {
-      await sheets.appendRows(config.sheets.inspections, inspectionRows);
-    }
-
-    await audit.log('create', 'customer', id, { name, phone, address }, 'user');
+    await audit.log('create', 'customer', id, { name, phone, address, area }, 'user');
 
     res.json({
       success: true,
       customer: { id, name, contractEnd },
-      inspectionsCreated: inspectionRows.length,
+      inspectionsCreated,
     });
   } catch (err) {
     console.error('POST /customers error:', err);
@@ -198,14 +193,16 @@ router.put('/:id', async (req, res) => {
 
     const old = rowToCustomer(oldRow, rowIndex - 1);
     const {
-      name, phone, address, buildingType, jobType, price,
+      name, phone, address, buildingType, area, jobType, price,
       contractStart, warrantyYears, inspectionIntervalMonths,
       status, notes,
     } = req.body;
 
-    const contractEnd = (contractStart && warrantyYears)
-      ? toISO(addYears(contractStart, parseInt(warrantyYears)))
-      : old.contractEnd;
+    const warranty = parseInt(warrantyYears ?? old.warrantyYears) || 0;
+    const startDate = contractStart ?? old.contractStart;
+    const contractEnd = (warranty > 0 && startDate)
+      ? toISO(addYears(startDate, warranty))
+      : (warranty === 0 ? '' : old.contractEnd);
 
     const updatedRow = [
       req.params.id,
@@ -213,9 +210,10 @@ router.put('/:id', async (req, res) => {
       phone ?? old.phone,
       address ?? old.address,
       buildingType ?? old.buildingType,
+      area ?? old.area,
       jobType ?? old.jobType,
       price ?? old.price,
-      contractStart ?? old.contractStart,
+      startDate,
       contractEnd,
       warrantyYears ?? old.warrantyYears,
       inspectionIntervalMonths ?? old.inspectionIntervalMonths,
@@ -227,9 +225,8 @@ router.put('/:id', async (req, res) => {
 
     await sheets.updateRow(config.sheets.customers, rowIndex, updatedRow);
 
-    // บันทึกการแก้ไข
     const changes = {};
-    const fields = ['name', 'phone', 'address', 'buildingType', 'jobType', 'price',
+    const fields = ['name', 'phone', 'address', 'buildingType', 'area', 'jobType', 'price',
       'contractStart', 'status', 'notes'];
     fields.forEach(f => {
       if (req.body[f] !== undefined && req.body[f] !== old[f]) {
@@ -270,57 +267,56 @@ router.post('/:id/renew', async (req, res) => {
       return res.status(400).json({ error: 'กรุณากรอกวันทำสัญญาใหม่และรอบรับประกัน' });
     }
 
-    const newContractEnd = toISO(addYears(newContractStart, parseInt(warrantyYears)));
-    const interval = parseInt(inspectionIntervalMonths) || parseInt(oldRow[10]) || 4;
+    const warranty = parseInt(warrantyYears);
+    const newContractEnd = warranty > 0 ? toISO(addYears(newContractStart, warranty)) : '';
+    const interval = parseInt(inspectionIntervalMonths) || parseInt(oldRow[11]) || 4;
     const now = nowISO();
 
     // อัพเดทข้อมูลสัญญา
-    oldRow[7] = newContractStart;
-    oldRow[8] = newContractEnd;
-    oldRow[9] = warrantyYears;
-    oldRow[10] = String(interval);
-    oldRow[11] = 'active';
-    oldRow[14] = now;
+    oldRow[8] = newContractStart;
+    oldRow[9] = newContractEnd;
+    oldRow[10] = warrantyYears;
+    oldRow[11] = String(interval);
+    oldRow[12] = 'active';
+    oldRow[15] = now;
 
     await sheets.updateRow(config.sheets.customers, rowIndex, oldRow);
 
-    // สร้างตารางตรวจเช็คใหม่
-    const totalRounds = Math.floor((parseInt(warrantyYears) * 12) / interval);
-    const inspectionRows = [];
+    // สร้างตารางตรวจเช็คใหม่ (เฉพาะกรณีมีรับประกัน)
+    let inspectionsCreated = 0;
+    if (warranty > 0) {
+      const totalRounds = Math.floor((warranty * 12) / interval);
+      const inspectionRows = [];
 
-    // หา round สูงสุดที่มีอยู่แล้ว
-    const inspRows = await sheets.getRows(config.sheets.inspections);
-    let maxRound = 0;
-    inspRows.slice(1).forEach(r => {
-      if (r[1] === req.params.id) {
-        const round = parseInt(r[2]) || 0;
-        if (round > maxRound) maxRound = round;
+      const inspRows = await sheets.getRows(config.sheets.inspections);
+      let maxRound = 0;
+      inspRows.slice(1).forEach(r => {
+        if (r[1] === req.params.id) {
+          const round = parseInt(r[2]) || 0;
+          if (round > maxRound) maxRound = round;
+        }
+      });
+
+      for (let i = 1; i <= totalRounds; i++) {
+        const insId = await sheets.generateId(config.sheets.inspections, 'INS');
+        const dueDate = toISO(addMonths(newContractStart, i * interval));
+        inspectionRows.push([
+          insId, req.params.id, String(maxRound + i), dueDate, '', 'pending',
+          '', '', '', now, now,
+        ]);
       }
-    });
 
-    for (let i = 1; i <= totalRounds; i++) {
-      const insId = await sheets.generateId(config.sheets.inspections, 'INS');
-      const dueDate = toISO(addMonths(newContractStart, i * interval));
-
-      inspectionRows.push([
-        insId, req.params.id, String(maxRound + i), dueDate, '', 'pending',
-        '', '', '', now, now,
-      ]);
-    }
-
-    if (inspectionRows.length > 0) {
-      await sheets.appendRows(config.sheets.inspections, inspectionRows);
+      if (inspectionRows.length > 0) {
+        await sheets.appendRows(config.sheets.inspections, inspectionRows);
+        inspectionsCreated = inspectionRows.length;
+      }
     }
 
     await audit.log('renew', 'customer', req.params.id, {
-      newContractStart, newContractEnd, warrantyYears,
+      newContractStart, newContractEnd: newContractEnd || 'ไม่รับประกัน', warrantyYears,
     }, 'user');
 
-    res.json({
-      success: true,
-      contractEnd: newContractEnd,
-      inspectionsCreated: inspectionRows.length,
-    });
+    res.json({ success: true, contractEnd: newContractEnd, inspectionsCreated });
   } catch (err) {
     console.error('POST /customers/:id/renew error:', err);
     res.status(500).json({ error: 'เกิดข้อผิดพลาด: ' + err.message });
