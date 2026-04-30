@@ -270,6 +270,27 @@
       renderCalendar();
     }
 
+    // ย่อรูปอัตโนมัติ
+    function resizeImage(file, maxWidth = 800, quality = 0.6) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let w = img.width, h = img.height;
+            if (w > maxWidth) { h = (h * maxWidth) / w; w = maxWidth; }
+            canvas.width = w;
+            canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            canvas.toBlob(resolve, 'image/jpeg', quality);
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
     let dashTechList = [];
     async function loadDashTechList() {
       try { dashTechList = await API.get('/api/technician-list'); } catch { dashTechList = []; }
@@ -302,6 +323,11 @@
           <label>ผลการตรวจ</label>
           <textarea class="form-control" id="qcResult" placeholder="ผลการตรวจ (ไม่บังคับ)"></textarea>
         </div>
+        <div class="form-group">
+          <label>📷 แนบรูปหลักฐาน</label>
+          <input type="file" class="form-control" id="qcPhotos" accept="image/*" multiple>
+          <small style="color:var(--gray-500)">เลือกได้หลายรูป ระบบย่อขนาดให้อัตโนมัติ</small>
+        </div>
       `, `
         <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
         <button class="btn btn-success" onclick="confirmComplete('${id}')">✓ บันทึกเสร็จสิ้น</button>
@@ -320,6 +346,19 @@
 
       try {
         await API.put(`/api/inspections/${id}/complete`, { technician, result, actualDate });
+
+        // อัพโหลดรูปหลักฐาน (ถ้ามี)
+        const photoInput = document.getElementById('qcPhotos');
+        if (photoInput && photoInput.files.length > 0) {
+          showToast('กำลังอัพโหลดรูปหลักฐาน...', 'warning');
+          const formData = new FormData();
+          for (const file of photoInput.files) {
+            const resized = await resizeImage(file);
+            formData.append('photos', resized, file.name);
+          }
+          await API.upload(`/api/inspections/${id}/photos`, formData);
+        }
+
         showToast('บันทึกเสร็จสิ้นเรียบร้อย');
         closeModal();
         loadDashboard();
