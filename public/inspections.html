@@ -491,7 +491,8 @@
 
         showToast('บันทึกเสร็จสิ้นเรียบร้อย');
         closeModal();
-        loadInspections();
+        // รอ Google Sheets sync สักครู่ก่อนโหลดใหม่
+        setTimeout(() => loadInspections(), 1500);
       } catch (err) {
         showToast(err.message, 'error');
       }

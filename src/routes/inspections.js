@@ -50,9 +50,13 @@ router.get('/', async (req, res) => {
       const insp = rowToInspection(row);
 
       if (insp.status === 'pending' && insp.dueDate) {
-        const due = new Date(insp.dueDate);
-        if (due < now) {
-          insp.status = 'overdue';
+        // parse date แบบ local ไม่ใช้ new Date() ตรงๆ เพราะจะเป็น UTC
+        const parts = insp.dueDate.split('-');
+        if (parts.length >= 3) {
+          const due = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+          if (due < now) {
+            insp.status = 'overdue';
+          }
         }
       }
 
@@ -231,6 +235,7 @@ router.put('/:id/complete', async (req, res) => {
     oldRow[7] = technician || oldRow[7] || '';
     oldRow[10] = now;
 
+    console.log(`Complete ${req.params.id}: row=${rowIndex}, date=${todayStr}, tech=${technician}, status=completed`);
     await sheets.updateRow(config.sheets.inspections, rowIndex, oldRow);
 
     await audit.log('complete', 'inspection', req.params.id, {
