@@ -131,10 +131,12 @@ async function findRowIndex(sheetName, id) {
   return -1;
 }
 
-// สร้างรหัสใหม่ (เช่น C001 → C002)
+// สร้างรหัสใหม่ (เช่น C001 → C002) — เช็คทุกชีทเพื่อไม่ให้ซ้ำกับที่ลบไปแล้ว
 async function generateId(sheetName, prefix) {
-  const rows = await getRows(sheetName);
   let maxNum = 0;
+
+  // เช็คจากชีทหลัก
+  const rows = await getRows(sheetName);
   for (let i = 1; i < rows.length; i++) {
     const id = rows[i][0] || '';
     if (id.startsWith(prefix)) {
@@ -142,6 +144,31 @@ async function generateId(sheetName, prefix) {
       if (num > maxNum) maxNum = num;
     }
   }
+
+  // เช็คจาก audit log ด้วย (กรณี ID ถูกลบไปแล้ว)
+  try {
+    const auditRows = await getRows(config.sheets.auditLog);
+    for (let i = 1; i < auditRows.length; i++) {
+      const entityId = auditRows[i][3] || '';
+      if (entityId.startsWith(prefix)) {
+        const num = parseInt(entityId.replace(prefix, ''));
+        if (num > maxNum) maxNum = num;
+      }
+    }
+  } catch {}
+
+  // เช็คจากชีทรูปถ่ายด้วย
+  try {
+    const photoRows = await getRows(config.sheets.photos);
+    for (let i = 1; i < photoRows.length; i++) {
+      const refId = photoRows[i][2] || '';
+      if (refId.startsWith(prefix)) {
+        const num = parseInt(refId.replace(prefix, ''));
+        if (num > maxNum) maxNum = num;
+      }
+    }
+  } catch {}
+
   return `${prefix}${String(maxNum + 1).padStart(3, '0')}`;
 }
 

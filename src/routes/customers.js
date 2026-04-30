@@ -359,6 +359,18 @@ router.delete('/:id', async (req, res) => {
       }
     }
 
+    // ลบรูปถ่ายที่เกี่ยวข้อง
+    const photoRows = await sheets.getRows(config.sheets.photos);
+    const photoRowIndices = [];
+    for (let i = 1; i < photoRows.length; i++) {
+      if (photoRows[i][2] === req.params.id) {
+        photoRowIndices.push(i + 1);
+      }
+    }
+    if (photoRowIndices.length > 0) {
+      await sheets.deleteRows(config.sheets.photos, photoRowIndices);
+    }
+
     // ลบตรวจเช็คก่อน (ถ้ามี)
     if (inspRowIndices.length > 0) {
       await sheets.deleteRows(config.sheets.inspections, inspRowIndices);
