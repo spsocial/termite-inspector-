@@ -285,24 +285,28 @@
 
     async function saveDetails() {
       try {
+        showOverlay('กำลังบันทึก...');
         await API.put(`/api/inspections/${inspId}`, {
           technician: getSelectedTech(),
           result: document.getElementById('result').value,
         });
+        hideOverlay();
         showToast('บันทึกข้อมูลเรียบร้อย');
       } catch (err) {
+        hideOverlay();
         showToast(err.message, 'error');
       }
     }
 
     async function markComplete() {
       try {
+        showOverlay('กำลังบันทึกเสร็จสิ้น...');
         await API.put(`/api/inspections/${inspId}/complete`, {
           technician: getSelectedTech(),
           result: document.getElementById('result').value,
         });
-        showToast('บันทึกเสร็จสิ้นเรียบร้อย');
-        loadDetail();
+        document.getElementById('overlayMsg').textContent = 'สำเร็จ! กำลังโหลดใหม่...';
+        setTimeout(() => window.location.reload(), 1500);
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -339,10 +343,11 @@
       }
 
       try {
-        showToast('กำลังย่อและอัพโหลด...', 'warning');
+        showOverlay('กำลังอัพโหลดรูป...');
         await API.upload(`/api/inspections/${inspId}/photos`, formData);
+        hideOverlay();
         showToast('อัพโหลดรูปเรียบร้อย');
-        loadPhotos(); // โหลดรูปใหม่
+        loadPhotos();
       } catch (err) {
         showToast(err.message, 'error');
       }

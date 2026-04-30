@@ -105,10 +105,13 @@
       if (!confirm(`ยืนยัน${label}ช่างคนนี้?`)) return;
 
       try {
+        showOverlay(`กำลัง${label}...`);
         await API.put(`/api/technicians/${id}`, { status: newStatus });
+        hideOverlay();
         showToast(`${label}เรียบร้อย`);
         loadTechnicians();
       } catch (err) {
+        hideOverlay();
         showToast(err.message, 'error');
       }
     }

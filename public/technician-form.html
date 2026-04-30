@@ -112,29 +112,23 @@
         body.pin = pin;
       }
 
-      const btn = document.getElementById('submitBtn');
-      btn.disabled = true;
-      btn.textContent = 'กำลังบันทึก...';
+      if (!editId && !pin) {
+        showToast('กรุณากรอก PIN', 'error');
+        return;
+      }
 
       try {
+        showOverlay(editId ? 'กำลังแก้ไขข้อมูล...' : 'กำลังเพิ่มช่าง...');
         if (editId) {
           await API.put(`/api/technicians/${editId}`, body);
-          showToast('แก้ไขข้อมูลช่างเรียบร้อย');
         } else {
-          if (!pin) {
-            showToast('กรุณากรอก PIN', 'error');
-            btn.disabled = false;
-            btn.textContent = 'บันทึก';
-            return;
-          }
           await API.post('/api/technicians', body);
-          showToast('เพิ่มช่างใหม่เรียบร้อย');
         }
+        document.getElementById('overlayMsg').textContent = 'สำเร็จ!';
         setTimeout(() => { window.location.href = '/technicians'; }, 1000);
       } catch (err) {
+        hideOverlay();
         showToast(err.message, 'error');
-        btn.disabled = false;
-        btn.textContent = 'บันทึก';
       }
     }
   </script>

@@ -368,32 +368,34 @@
       }
 
       try {
+        showOverlay(editId ? 'กำลังอัพเดทข้อมูล...' : 'กำลังเพิ่มลูกค้า...');
         let customerId = editId;
 
         if (editId) {
           await API.put(`/api/customers/${editId}`, data);
-          showToast('อัพเดทข้อมูลเรียบร้อย');
         } else {
           const result = await API.post('/api/customers', data);
           customerId = result.customer.id;
-          showToast(`เพิ่มลูกค้าเรียบร้อย (สร้าง ${result.inspectionsCreated} รอบตรวจเช็ค)`);
         }
 
-        // อัพโหลดรูปบ้าน (ถ้ามี) — ย่อขนาดอัตโนมัติก่อนอัพ
+        // อัพโหลดรูปบ้าน (ถ้ามี)
         const fileInput = document.getElementById('housePhotos');
         if (fileInput.files.length > 0) {
-          showToast('กำลังย่อและอัพโหลดรูป...', 'warning');
+          document.getElementById('overlayMsg').textContent = 'กำลังอัพโหลดรูป...';
           const formData = new FormData();
           for (const file of fileInput.files) {
             const resized = await resizeImage(file);
             formData.append('photos', resized, file.name);
           }
           await API.upload(`/api/customers/${customerId}/photos`, formData);
-          showToast('อัพโหลดรูปเรียบร้อย');
         }
 
+        document.getElementById('overlayMsg').textContent = 'สำเร็จ!';
         if (!editId) {
-          setTimeout(() => window.location.href = '/customers', 1500);
+          setTimeout(() => window.location.href = '/customers', 1000);
+        } else {
+          hideOverlay();
+          showToast('อัพเดทข้อมูลเรียบร้อย');
         }
       } catch (err) {
         showToast(err.message, 'error');
@@ -473,15 +475,18 @@
         const rDay = parseInt(document.getElementById('renewDay').value);
         const rMonth = parseInt(document.getElementById('renewMonth').value);
         const rYear = parseInt(document.getElementById('renewYear').value) - 543;
-        const renewISO = new Date(rYear, rMonth - 1, rDay).toISOString().split('T')[0];
+        const renewISO = `${rYear}-${String(rMonth).padStart(2,'0')}-${String(rDay).padStart(2,'0')}`;
+
+        closeModal();
+        showOverlay('กำลังต่อสัญญา...');
 
         const result = await API.post(`/api/customers/${editId}/renew`, {
           newContractStart: renewISO,
           warrantyYears: document.getElementById('renewYears').value,
           inspectionIntervalMonths: document.getElementById('renewInterval').value,
         });
+        hideOverlay();
         showToast(`ต่อสัญญาเรียบร้อย (สร้าง ${result.inspectionsCreated} รอบตรวจเช็คใหม่)`);
-        closeModal();
         loadCustomer();
       } catch (err) {
         showToast(err.message, 'error');
@@ -493,10 +498,12 @@
       if (!confirm('ยืนยันอีกครั้ง: ลบลูกค้า ' + (customerData?.name || editId) + ' ?')) return;
 
       try {
-        const result = await API.del(`/api/customers/${editId}`);
-        showToast(`ลบลูกค้าเรียบร้อย (ลบ ${result.inspectionsDeleted} รอบตรวจเช็ค)`);
-        setTimeout(() => window.location.href = '/customers', 1500);
+        showOverlay('กำลังลบลูกค้า...');
+        await API.del(`/api/customers/${editId}`);
+        document.getElementById('overlayMsg').textContent = 'ลบเรียบร้อย!';
+        setTimeout(() => window.location.href = '/customers', 1000);
       } catch (err) {
+        hideOverlay();
         showToast(err.message, 'error');
       }
     }
