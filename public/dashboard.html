@@ -19,6 +19,7 @@
         <a href="/customers" data-admin-only><span class="icon">👥</span> รายชื่อลูกค้า</a>
         <a href="/customer-form" data-admin-only><span class="icon">➕</span> เพิ่มลูกค้า</a>
         <a href="/inspections"><span class="icon">📋</span> ตารางตรวจเช็ค</a>
+        <a href="/technicians" data-admin-only><span class="icon">👷</span> จัดการช่าง</a>
         <a href="/history" data-admin-only><span class="icon">📜</span> ประวัติแก้ไข</a>
         <a href="/settings" data-admin-only><span class="icon">⚙️</span> ตั้งค่า</a>
       </nav>
@@ -271,11 +272,18 @@
     }
 
     async function quickComplete(id) {
+      const techField = isTechnician()
+        ? `<div class="form-group">
+            <label>ช่างผู้ตรวจ</label>
+            <input type="text" class="form-control" id="qcTech" value="${currentDisplayName}" readonly style="background:var(--gray-100)">
+          </div>`
+        : `<div class="form-group">
+            <label>ช่างผู้ตรวจ</label>
+            <input type="text" class="form-control" id="qcTech" placeholder="ชื่อช่าง">
+          </div>`;
+
       const modal = showModal('บันทึกผลตรวจเช็ค', `
-        <div class="form-group">
-          <label>ช่างผู้ตรวจ</label>
-          <input type="text" class="form-control" id="qcTech" placeholder="ชื่อช่าง">
-        </div>
+        ${techField}
         <div class="form-group">
           <label>ผลการตรวจ</label>
           <textarea class="form-control" id="qcResult" placeholder="ผลการตรวจ (ไม่บังคับ)"></textarea>

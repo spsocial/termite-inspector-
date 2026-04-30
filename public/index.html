@@ -228,6 +228,8 @@
 
         if (data.success) {
           localStorage.setItem('userRole', data.role);
+          localStorage.setItem('displayName', data.displayName || '');
+          localStorage.setItem('technicianId', data.technicianId || '');
           window.location.href = '/dashboard';
         } else {
           showError(data.error || 'PIN ไม่ถูกต้อง');

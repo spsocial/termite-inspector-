@@ -161,7 +161,7 @@ router.post('/', async (req, res) => {
       }
     }
 
-    await audit.log('create', 'customer', id, { name, phone, address, area }, 'user');
+    await audit.log('create', 'customer', id, { name, phone, address, area }, req.user?.displayName || 'admin');
 
     res.json({
       success: true,
@@ -235,7 +235,7 @@ router.put('/:id', async (req, res) => {
     });
 
     if (Object.keys(changes).length > 0) {
-      await audit.log('update', 'customer', req.params.id, changes, 'user');
+      await audit.log('update', 'customer', req.params.id, changes, req.user?.displayName || 'admin');
     }
 
     res.json({ success: true, customer: rowToCustomer(updatedRow, rowIndex - 1) });
@@ -314,7 +314,7 @@ router.post('/:id/renew', async (req, res) => {
 
     await audit.log('renew', 'customer', req.params.id, {
       newContractStart, newContractEnd: newContractEnd || 'ไม่รับประกัน', warrantyYears,
-    }, 'user');
+    }, req.user?.displayName || 'admin');
 
     res.json({ success: true, contractEnd: newContractEnd, inspectionsCreated });
   } catch (err) {

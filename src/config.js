@@ -4,7 +4,6 @@ module.exports = {
   port: process.env.PORT || 3000,
   nodeEnv: process.env.NODE_ENV || 'development',
   appPin: process.env.APP_PIN || '1234',
-  techPin: process.env.TECHNICIAN_PIN || '0000',
   jwtSecret: process.env.JWT_SECRET || 'default-secret-change-me',
 
   google: {
@@ -23,5 +22,6 @@ module.exports = {
     customers: 'ลูกค้า',
     inspections: 'ตรวจเช็ค',
     auditLog: 'ประวัติแก้ไข',
+    technicians: 'ช่าง',
   },
 };

@@ -153,7 +153,7 @@ async function ensureSheets() {
   });
 
   const existingSheets = res.data.sheets.map(s => s.properties.title);
-  const requiredSheets = [config.sheets.customers, config.sheets.inspections, config.sheets.auditLog];
+  const requiredSheets = [config.sheets.customers, config.sheets.inspections, config.sheets.auditLog, config.sheets.technicians];
 
   for (const sheetName of requiredSheets) {
     if (!existingSheets.includes(sheetName)) {
@@ -179,11 +179,17 @@ async function ensureSheets() {
           'รหัสตรวจเช็ค', 'รหัสลูกค้า', 'รอบที่', 'วันกำหนด',
           'วันตรวจจริง', 'สถานะ', 'ผลการตรวจ', 'ช่างผู้ตรวจ',
           'ลิงก์รูปถ่าย', 'created_at', 'updated_at',
+          'รับงานโดย(ID)', 'รับงานโดย(ชื่อ)',
         ]);
       } else if (sheetName === config.sheets.auditLog) {
         await appendRow(sheetName, [
           'timestamp', 'action', 'entity', 'entity_id',
           'changes', 'user',
+        ]);
+      } else if (sheetName === config.sheets.technicians) {
+        await appendRow(sheetName, [
+          'รหัสช่าง', 'ชื่อ', 'PIN', 'เบอร์โทร',
+          'สถานะ', 'created_at', 'updated_at',
         ]);
       }
     }

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>จัดการช่าง - ลูกค้าปลวก</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="app-layout">
+    <div class="sidebar">
+      <div class="sidebar-header"><h1>🏠 ลูกค้าปลวก</h1><span id="roleBadge" class="badge badge-success" style="margin-top:6px;">Admin</span></div>
+      <nav class="sidebar-nav">
+        <a href="/dashboard"><span class="icon">📊</span> แดชบอร์ด</a>
+        <a href="/customers" data-admin-only><span class="icon">👥</span> รายชื่อลูกค้า</a>
+        <a href="/customer-form" data-admin-only><span class="icon">➕</span> เพิ่มลูกค้า</a>
+        <a href="/inspections"><span class="icon">📋</span> ตารางตรวจเช็ค</a>
+        <a href="/technicians" data-admin-only><span class="icon">👷</span> จัดการช่าง</a>
+        <a href="/history" data-admin-only><span class="icon">📜</span> ประวัติแก้ไข</a>
+        <a href="/settings" data-admin-only><span class="icon">⚙️</span> ตั้งค่า</a>
+      </nav>
+      <div class="sidebar-footer"><a href="#" onclick="logout()"><span>🚪</span> ออกจากระบบ</a></div>
+    </div>
+    <div class="sidebar-overlay"></div>
+    <button class="sidebar-toggle">☰</button>
+
+    <div class="main-content">
+      <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <h2>จัดการช่าง</h2>
+          <p>เพิ่ม แก้ไข หรือปิดการใช้งานช่างในระบบ</p>
+        </div>
+        <a href="/technician-form" class="btn btn-primary">+ เพิ่มช่างใหม่</a>
+      </div>
+
+      <div id="techList">
+        <div class="loading"><div class="spinner"></div>กำลังโหลด...</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+  <script>
+    async function loadTechnicians() {
+      try {
+        const techs = await API.get('/api/technicians');
+        renderList(techs);
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    function renderList(techs) {
+      const el = document.getElementById('techList');
+
+      if (techs.length === 0) {
+        el.innerHTML = `
+          <div class="empty-state">
+            <div class="icon">👷</div>
+            <h3>ยังไม่มีช่างในระบบ</h3>
+            <p>กดปุ่ม "เพิ่มช่างใหม่" เพื่อเริ่มต้น</p>
+          </div>`;
+        return;
+      }
+
+      el.innerHTML = `
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th>รหัส</th>
+                <th>ชื่อ</th>
+                <th>เบอร์โทร</th>
+                <th>สถานะ</th>
+                <th>จัดการ</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${techs.map(t => `
+                <tr style="${t.status !== 'active' ? 'opacity:0.5' : ''}">
+                  <td><strong>${t.id}</strong></td>
+                  <td>${t.name}</td>
+                  <td>${t.phone || '-'}</td>
+                  <td>
+                    ${t.status === 'active'
+                      ? '<span class="badge badge-success">ใช้งาน</span>'
+                      : '<span class="badge badge-gray">ปิดใช้งาน</span>'}
+                  </td>
+                  <td>
+                    <a href="/technician-form?id=${t.id}" class="btn btn-sm btn-outline">แก้ไข</a>
+                    ${t.status === 'active'
+                      ? `<button class="btn btn-sm btn-danger" onclick="toggleStatus('${t.id}', 'inactive')">ปิดใช้งาน</button>`
+                      : `<button class="btn btn-sm btn-success" onclick="toggleStatus('${t.id}', 'active')">เปิดใช้งาน</button>`}
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    async function toggleStatus(id, newStatus) {
+      const label = newStatus === 'active' ? 'เปิดใช้งาน' : 'ปิดใช้งาน';
+      if (!confirm(`ยืนยัน${label}ช่างคนนี้?`)) return;
+
+      try {
+        await API.put(`/api/technicians/${id}`, { status: newStatus });
+        showToast(`${label}เรียบร้อย`);
+        loadTechnicians();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    loadTechnicians();
+  </script>
+</body>
+</html>

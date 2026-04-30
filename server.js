@@ -37,6 +37,7 @@ app.use('/api/dashboard', require('./src/routes/dashboard'));
 app.use('/api/customers', adminOnly, require('./src/routes/customers'));
 app.use('/api/export', adminOnly, require('./src/routes/export'));
 app.use('/api/history', adminOnly, require('./src/routes/history'));
+app.use('/api/technicians', adminOnly, require('./src/routes/technicians'));
 
 // Telegram test endpoint (admin only)
 app.post('/api/telegram/test', adminOnly, async (req, res) => {
@@ -61,7 +62,7 @@ app.post('/api/telegram/daily-summary', adminOnly, async (req, res) => {
 });
 
 // HTML pages (SPA-like routing)
-const pages = ['dashboard', 'customers', 'customer-form', 'inspections', 'inspection-detail', 'history', 'settings'];
+const pages = ['dashboard', 'customers', 'customer-form', 'inspections', 'inspection-detail', 'history', 'settings', 'technicians', 'technician-form'];
 pages.forEach(page => {
   app.get(`/${page}`, (req, res) => {
     res.sendFile(path.join(__dirname, 'public', `${page}.html`));

@@ -9,6 +9,11 @@ const { toISO, nowISO, today, daysBetween, toThaiDisplay } = require('../utils/d
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+// Helper: ดึงชื่อผู้ใช้จาก req.user
+function getUserName(req) {
+  return req.user?.displayName || 'unknown';
+}
+
 function rowToInspection(row) {
   return {
     id: row[0] || '',
@@ -22,6 +27,8 @@ function rowToInspection(row) {
     photos: row[8] || '',
     createdAt: row[9] || '',
     updatedAt: row[10] || '',
+    claimedBy: row[11] || '',
+    claimedByName: row[12] || '',
   };
 }
 
@@ -42,7 +49,6 @@ router.get('/', async (req, res) => {
     let inspections = inspRows.slice(1).map(row => {
       const insp = rowToInspection(row);
 
-      // อัพเดทสถานะ overdue อัตโนมัติ
       if (insp.status === 'pending' && insp.dueDate) {
         const due = new Date(insp.dueDate);
         if (due < now) {
@@ -68,6 +74,11 @@ router.get('/', async (req, res) => {
     // กรองตาม customerId
     if (req.query.customerId) {
       inspections = inspections.filter(i => i.customerId === req.query.customerId);
+    }
+
+    // กรองตามช่างที่รับงาน
+    if (req.query.claimedBy) {
+      inspections = inspections.filter(i => i.claimedBy === req.query.claimedBy);
     }
 
     // กรองตามช่วงวันที่
@@ -111,7 +122,6 @@ router.get('/:id', async (req, res) => {
 
     const insp = rowToInspection(row);
 
-    // ดึงข้อมูลลูกค้า
     const custRows = await sheets.getRows(config.sheets.customers);
     const custRow = custRows.find((r, i) => i > 0 && r[0] === insp.customerId);
 
@@ -133,6 +143,60 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// PUT /api/inspections/:id/claim - ช่างกดรับงาน
+router.put('/:id/claim', async (req, res) => {
+  try {
+    const inspRows = await sheets.getRows(config.sheets.inspections);
+    let rowIndex = -1;
+    let oldRow = null;
+
+    for (let i = 1; i < inspRows.length; i++) {
+      if (inspRows[i][0] === req.params.id) {
+        rowIndex = i + 1;
+        oldRow = inspRows[i];
+        break;
+      }
+    }
+
+    if (rowIndex === -1) return res.status(404).json({ error: 'ไม่พบรายการตรวจเช็ค' });
+
+    const techId = req.user?.technicianId || '';
+    const techName = req.user?.displayName || '';
+
+    // เช็คว่ามีคนรับแล้วหรือยัง
+    if (oldRow[11] && oldRow[11] !== techId) {
+      return res.status(400).json({ error: `งานนี้ถูกรับโดย ${oldRow[12] || oldRow[11]} แล้ว` });
+    }
+
+    // ถ้ารับอยู่แล้ว = ยกเลิกรับ
+    if (oldRow[11] === techId) {
+      oldRow[11] = '';
+      oldRow[12] = '';
+      oldRow[10] = nowISO();
+
+      await sheets.updateRow(config.sheets.inspections, rowIndex, oldRow);
+      await audit.log('unclaim', 'inspection', req.params.id, { technicianId: techId }, techName);
+
+      return res.json({ success: true, action: 'unclaimed' });
+    }
+
+    // รับงาน
+    // ขยาย row ให้มี column ครบ
+    while (oldRow.length < 13) oldRow.push('');
+    oldRow[11] = techId;
+    oldRow[12] = techName;
+    oldRow[10] = nowISO();
+
+    await sheets.updateRow(config.sheets.inspections, rowIndex, oldRow);
+    await audit.log('claim', 'inspection', req.params.id, { technicianId: techId, technicianName: techName }, techName);
+
+    res.json({ success: true, action: 'claimed' });
+  } catch (err) {
+    console.error('PUT /inspections/:id/claim error:', err);
+    res.status(500).json({ error: 'เกิดข้อผิดพลาด: ' + err.message });
+  }
+});
+
 // PUT /api/inspections/:id/complete - ติ๊กเสร็จ
 router.put('/:id/complete', async (req, res) => {
   try {
@@ -150,21 +214,28 @@ router.put('/:id/complete', async (req, res) => {
 
     if (rowIndex === -1) return res.status(404).json({ error: 'ไม่พบรายการตรวจเช็ค' });
 
-    const { result, technician } = req.body;
+    const { result } = req.body;
+    // ชื่อช่าง: ใช้จาก session ถ้าเป็นช่าง, ถ้า admin ส่งมาในbody ก็ใช้
+    let technician = req.body.technician;
+    if (req.user?.role === 'technician') {
+      technician = req.user.displayName;
+    }
+
     const now = nowISO();
     const todayStr = toISO(today());
 
-    oldRow[4] = todayStr; // วันตรวจจริง
-    oldRow[5] = 'completed'; // สถานะ
-    oldRow[6] = result || oldRow[6] || ''; // ผลการตรวจ
-    oldRow[7] = technician || oldRow[7] || ''; // ช่างผู้ตรวจ
-    oldRow[10] = now; // updated_at
+    while (oldRow.length < 13) oldRow.push('');
+    oldRow[4] = todayStr;
+    oldRow[5] = 'completed';
+    oldRow[6] = result || oldRow[6] || '';
+    oldRow[7] = technician || oldRow[7] || '';
+    oldRow[10] = now;
 
     await sheets.updateRow(config.sheets.inspections, rowIndex, oldRow);
 
     await audit.log('complete', 'inspection', req.params.id, {
       actualDate: todayStr, result, technician,
-    }, 'user');
+    }, getUserName(req));
 
     // แจ้งเตือน Telegram
     const custRows = await sheets.getRows(config.sheets.customers);
@@ -215,7 +286,7 @@ router.put('/:id', async (req, res) => {
 
     await sheets.updateRow(config.sheets.inspections, rowIndex, oldRow);
 
-    await audit.log('update', 'inspection', req.params.id, req.body, 'user');
+    await audit.log('update', 'inspection', req.params.id, req.body, getUserName(req));
 
     res.json({ success: true });
   } catch (err) {
@@ -256,7 +327,6 @@ router.post('/:id/photos', upload.array('photos', 10), async (req, res) => {
       uploadedLinks.push(result.directLink);
     }
 
-    // เพิ่มลิงก์รูปใหม่ต่อท้ายลิงก์เดิม
     const existingPhotos = oldRow[8] ? oldRow[8].split(',') : [];
     const allPhotos = [...existingPhotos, ...uploadedLinks];
     oldRow[8] = allPhotos.join(',');
@@ -274,9 +344,16 @@ router.post('/:id/photos', upload.array('photos', 10), async (req, res) => {
 // POST /api/inspections/batch-complete - ติ๊กเสร็จหลายรายการ
 router.post('/batch-complete', async (req, res) => {
   try {
-    const { ids, technician, result } = req.body;
+    const { ids, result } = req.body;
+    let { technician } = req.body;
+
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'กรุณาเลือกรายการ' });
+    }
+
+    // ถ้าเป็นช่าง ใช้ชื่อจาก session
+    if (req.user?.role === 'technician') {
+      technician = req.user.displayName;
     }
 
     const inspRows = await sheets.getRows(config.sheets.inspections);
@@ -287,6 +364,7 @@ router.post('/batch-complete', async (req, res) => {
     for (const id of ids) {
       for (let i = 1; i < inspRows.length; i++) {
         if (inspRows[i][0] === id) {
+          while (inspRows[i].length < 13) inspRows[i].push('');
           inspRows[i][4] = todayStr;
           inspRows[i][5] = 'completed';
           if (result) inspRows[i][6] = result;
@@ -302,7 +380,7 @@ router.post('/batch-complete', async (req, res) => {
 
     await audit.log('batch-complete', 'inspection', ids.join(','), {
       count: completedCount, technician, result,
-    }, 'user');
+    }, getUserName(req));
 
     telegram.sendMessageAsync(
       `✅ <b>ตรวจเช็คเสร็จสิ้น ${completedCount} รายการ</b>\n` +

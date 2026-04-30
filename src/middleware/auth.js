@@ -2,7 +2,6 @@ const jwt = require('jsonwebtoken');
 const config = require('../config');
 
 function authMiddleware(req, res, next) {
-  // ข้ามการเช็ค auth สำหรับ login และ static files
   if (req.path === '/api/auth/login' || req.path === '/' || req.path === '/index.html') {
     return next();
   }
@@ -28,7 +27,6 @@ function authMiddleware(req, res, next) {
   }
 }
 
-// Middleware สำหรับหน้าที่ admin เท่านั้น
 function adminOnly(req, res, next) {
   if (!req.user || req.user.role !== 'admin') {
     if (req.path.startsWith('/api/')) {
@@ -39,9 +37,13 @@ function adminOnly(req, res, next) {
   next();
 }
 
-// GET /api/auth/me - ดึงข้อมูล role ปัจจุบัน
+// GET /api/auth/me - ดึงข้อมูล user ปัจจุบัน
 function getMeHandler(req, res) {
-  res.json({ role: req.user?.role || 'unknown' });
+  res.json({
+    role: req.user?.role || 'unknown',
+    displayName: req.user?.displayName || 'ไม่ทราบ',
+    technicianId: req.user?.technicianId || null,
+  });
 }
 
 module.exports = { authMiddleware, adminOnly, getMeHandler };

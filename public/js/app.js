@@ -1,15 +1,21 @@
-// ==================== Role Management ====================
+// ==================== Role & User Management ====================
 let currentRole = localStorage.getItem('userRole') || 'admin';
+let currentDisplayName = localStorage.getItem('displayName') || '';
+let currentTechId = localStorage.getItem('technicianId') || '';
 
 function isAdmin() { return currentRole === 'admin'; }
 function isTechnician() { return currentRole === 'technician'; }
 
-// โหลด role จาก server
+// โหลด role + ข้อมูลผู้ใช้จาก server
 async function loadRole() {
   try {
     const data = await API.get('/api/auth/me');
     currentRole = data.role;
+    currentDisplayName = data.displayName || '';
+    currentTechId = data.technicianId || '';
     localStorage.setItem('userRole', currentRole);
+    localStorage.setItem('displayName', currentDisplayName);
+    localStorage.setItem('technicianId', currentTechId);
     applySidebarRole();
     return currentRole;
   } catch {
@@ -17,7 +23,7 @@ async function loadRole() {
   }
 }
 
-// ซ่อน/แสดง menu ตาม role
+// ซ่อน/แสดง menu ตาม role + แสดงชื่อผู้ใช้
 function applySidebarRole() {
   document.querySelectorAll('[data-admin-only]').forEach(el => {
     el.style.display = isAdmin() ? '' : 'none';
@@ -26,17 +32,22 @@ function applySidebarRole() {
     el.style.display = isAdmin() ? '' : 'none';
   });
 
-  // แสดงป้าย role ใน sidebar
+  // แสดงป้าย role + ชื่อ ใน sidebar
   const badge = document.getElementById('roleBadge');
   if (badge) {
-    badge.textContent = isAdmin() ? 'Admin' : 'ช่าง';
-    badge.className = isAdmin() ? 'badge badge-success' : 'badge badge-blue';
+    if (isAdmin()) {
+      badge.textContent = 'Admin';
+      badge.className = 'badge badge-success';
+    } else {
+      badge.textContent = currentDisplayName || 'ช่าง';
+      badge.className = 'badge badge-blue';
+    }
   }
 }
 
 // เช็คว่าช่างพยายามเข้าหน้า admin-only
 function checkAdminPage() {
-  const adminPages = ['customers', 'customer-form', 'history', 'settings'];
+  const adminPages = ['customers', 'customer-form', 'history', 'settings', 'technicians', 'technician-form'];
   const currentPage = window.location.pathname.replace('/', '').replace('.html', '');
   if (adminPages.includes(currentPage) && isTechnician()) {
     window.location.href = '/dashboard';
@@ -62,6 +73,8 @@ const API = {
 
       if (res.status === 401) {
         localStorage.removeItem('userRole');
+        localStorage.removeItem('displayName');
+        localStorage.removeItem('technicianId');
         window.location.href = '/';
         return null;
       }
@@ -276,6 +289,8 @@ async function downloadExport(url, filename) {
 async function logout() {
   await API.post('/api/auth/logout');
   localStorage.removeItem('userRole');
+  localStorage.removeItem('displayName');
+  localStorage.removeItem('technicianId');
   window.location.href = '/';
 }
 

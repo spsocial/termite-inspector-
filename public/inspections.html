@@ -55,6 +55,7 @@
         <a href="/customers" data-admin-only><span class="icon">👥</span> รายชื่อลูกค้า</a>
         <a href="/customer-form" data-admin-only><span class="icon">➕</span> เพิ่มลูกค้า</a>
         <a href="/inspections"><span class="icon">📋</span> ตารางตรวจเช็ค</a>
+        <a href="/technicians" data-admin-only><span class="icon">👷</span> จัดการช่าง</a>
         <a href="/history" data-admin-only><span class="icon">📜</span> ประวัติแก้ไข</a>
         <a href="/settings" data-admin-only><span class="icon">⚙️</span> ตั้งค่า</a>
       </nav>
@@ -93,6 +94,9 @@
         <button class="tab" data-status="pending" onclick="filterTab('pending', this)">
           รอดำเนินการ <span class="count" id="countPending">0</span>
         </button>
+        <button class="tab" data-status="my-claims" onclick="filterTab('my-claims', this)" id="tabMyClaims" style="display:none">
+          งานของฉัน <span class="count" id="countMyClaims">0</span>
+        </button>
         <button class="tab" data-status="completed" onclick="filterTab('completed', this)">
           เสร็จสิ้น <span class="count" id="countCompleted">0</span>
         </button>
@@ -123,6 +127,11 @@
       document.getElementById('pageTitle').textContent = `ตารางตรวจเช็ค - ${customerId}`;
     }
 
+    // แสดงแท็บ "งานของฉัน" ถ้าเป็นช่าง
+    if (isTechnician()) {
+      document.getElementById('tabMyClaims').style.display = '';
+    }
+
     async function loadInspections() {
       try {
         let url = '/api/inspections';
@@ -136,18 +145,22 @@
     }
 
     function updateCounts() {
-      const counts = { all: allInspections.length, pending: 0, overdue: 0, completed: 0 };
+      const counts = { all: allInspections.length, pending: 0, overdue: 0, completed: 0, myClaims: 0 };
       allInspections.forEach(i => {
         if (i.status === 'overdue' || (i.status === 'pending' && i.daysUntilDue < 0)) {
           counts.overdue++;
         } else if (counts[i.status] !== undefined) {
           counts[i.status]++;
         }
+        if (i.claimedBy === currentTechId && currentTechId) {
+          counts.myClaims++;
+        }
       });
       document.getElementById('countAll').textContent = counts.all;
       document.getElementById('countOverdue').textContent = counts.overdue;
       document.getElementById('countPending').textContent = counts.pending;
       document.getElementById('countCompleted').textContent = counts.completed;
+      document.getElementById('countMyClaims').textContent = counts.myClaims;
     }
 
     function renderList() {
@@ -157,6 +170,8 @@
       // Filter by tab
       if (currentTab === 'overdue') {
         data = data.filter(i => i.status === 'overdue' || (i.status === 'pending' && i.daysUntilDue < 0));
+      } else if (currentTab === 'my-claims') {
+        data = data.filter(i => i.claimedBy === currentTechId && currentTechId);
       } else if (currentTab !== 'all') {
         data = data.filter(i => i.status === currentTab);
       }
@@ -181,11 +196,29 @@
         const isPendingSoon = !isOverdue && i.status === 'pending' && i.daysUntilDue <= 7;
         const isCompleted = i.status === 'completed';
         const isSelected = selectedIds.has(i.id);
+        const isMyClaim = i.claimedBy === currentTechId && currentTechId;
+        const isClaimedByOther = i.claimedBy && !isMyClaim;
 
         let cardClass = 'inspection-card';
         if (isOverdue) cardClass += ' overdue';
         else if (isPendingSoon) cardClass += ' pending-soon';
         else if (isCompleted) cardClass += ' completed';
+
+        // แสดงข้อมูลผู้รับงาน
+        let claimInfo = '';
+        if (i.claimedByName) {
+          claimInfo = ` | <span style="color:var(--primary);font-weight:600">👷 ${i.claimedByName}</span>`;
+        }
+
+        // ปุ่มรับงาน/ยกเลิกรับ
+        let claimBtn = '';
+        if (!isCompleted) {
+          if (isMyClaim) {
+            claimBtn = `<button class="btn btn-sm" style="background:var(--warning);color:#fff;" onclick="claimJob('${i.id}')">ยกเลิกรับ</button>`;
+          } else if (!i.claimedBy) {
+            claimBtn = `<button class="btn btn-sm btn-primary" onclick="claimJob('${i.id}')">รับงาน</button>`;
+          }
+        }
 
         return `
           <div class="${cardClass}">
@@ -200,12 +233,14 @@
                 ${i.id} | รอบที่ ${i.round} | กำหนด ${toThaiDate(i.dueDate)}
                 ${i.actualDate ? ` | ตรวจจริง ${toThaiDate(i.actualDate)}` : ''}
                 ${i.technician ? ` | ช่าง: ${i.technician}` : ''}
+                ${claimInfo}
               </div>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               ${isOverdue ? `<span class="badge badge-danger">เกิน ${Math.abs(i.daysUntilDue)} วัน</span>` : ''}
               ${isPendingSoon ? daysLabel(i.daysUntilDue) : ''}
               ${isCompleted ? statusBadge('completed') : ''}
+              ${claimBtn}
               ${!isCompleted ? `
                 <button class="btn btn-sm btn-success" onclick="quickComplete('${i.id}', '${i.customerName}')">✓ เสร็จ</button>
               ` : ''}
@@ -247,13 +282,35 @@
       bar.classList.toggle('show', selectedIds.size > 0);
     }
 
+    async function claimJob(id) {
+      try {
+        const result = await API.put(`/api/inspections/${id}/claim`);
+        if (result.action === 'claimed') {
+          showToast('รับงานเรียบร้อย');
+        } else {
+          showToast('ยกเลิกรับงานแล้ว');
+        }
+        loadInspections();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
     async function quickComplete(id, customerName) {
+      // ถ้าเป็นช่าง ไม่ต้องใส่ชื่อ (ใช้จาก session อัตโนมัติ)
+      const techField = isTechnician()
+        ? `<div class="form-group">
+            <label>ช่างผู้ตรวจ</label>
+            <input type="text" class="form-control" id="qcTech" value="${currentDisplayName}" readonly style="background:var(--gray-100)">
+          </div>`
+        : `<div class="form-group">
+            <label>ช่างผู้ตรวจ</label>
+            <input type="text" class="form-control" id="qcTech" placeholder="ชื่อช่าง">
+          </div>`;
+
       showModal('บันทึกผลตรวจเช็ค', `
         <p style="margin-bottom:16px"><strong>${customerName}</strong></p>
-        <div class="form-group">
-          <label>ช่างผู้ตรวจ</label>
-          <input type="text" class="form-control" id="qcTech" placeholder="ชื่อช่าง">
-        </div>
+        ${techField}
         <div class="form-group">
           <label>ผลการตรวจ</label>
           <textarea class="form-control" id="qcResult" placeholder="ผลการตรวจ"></textarea>
@@ -281,12 +338,19 @@
     async function batchComplete() {
       if (selectedIds.size === 0) return;
 
+      const techField = isTechnician()
+        ? `<div class="form-group" style="margin-top:16px">
+            <label>ช่างผู้ตรวจ</label>
+            <input type="text" class="form-control" id="batchTech" value="${currentDisplayName}" readonly style="background:var(--gray-100)">
+          </div>`
+        : `<div class="form-group" style="margin-top:16px">
+            <label>ช่างผู้ตรวจ</label>
+            <input type="text" class="form-control" id="batchTech" placeholder="ชื่อช่าง">
+          </div>`;
+
       showModal('ยืนยันทำเสร็จหลายรายการ', `
         <p>จะบันทึกเสร็จสิ้น <strong>${selectedIds.size}</strong> รายการ</p>
-        <div class="form-group" style="margin-top:16px">
-          <label>ช่างผู้ตรวจ</label>
-          <input type="text" class="form-control" id="batchTech" placeholder="ชื่อช่าง">
-        </div>
+        ${techField}
         <div class="form-group">
           <label>ผลการตรวจ</label>
           <textarea class="form-control" id="batchResult" placeholder="ผลการตรวจ"></textarea>
