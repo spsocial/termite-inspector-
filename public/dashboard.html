@@ -345,24 +345,25 @@
       const actualDate = document.getElementById('qcDate').value;
 
       try {
+        closeModal();
+        showOverlay('กำลังบันทึกผลตรวจเช็ค...');
+
         await API.put(`/api/inspections/${id}/complete`, { technician, result, actualDate });
 
         // อัพโหลดรูปหลักฐาน (ถ้ามี)
-        const photoInput = document.getElementById('qcPhotos');
-        if (photoInput && photoInput.files.length > 0) {
-          showToast('กำลังอัพโหลดรูปหลักฐาน...', 'warning');
+        const photoFiles = document.getElementById('qcPhotos')?.files;
+        if (photoFiles && photoFiles.length > 0) {
+          document.getElementById('overlayMsg').textContent = 'กำลังอัพโหลดรูปหลักฐาน...';
           const formData = new FormData();
-          for (const file of photoInput.files) {
+          for (const file of photoFiles) {
             const resized = await resizeImage(file);
             formData.append('photos', resized, file.name);
           }
           await API.upload(`/api/inspections/${id}/photos`, formData);
         }
 
-        showToast('บันทึกเสร็จสิ้นเรียบร้อย');
-        closeModal();
-        // รอ Google Sheets sync ก่อนโหลดใหม่
-        setTimeout(() => loadDashboard(), 2000);
+        document.getElementById('overlayMsg').textContent = 'สำเร็จ! กำลังโหลดใหม่...';
+        setTimeout(() => window.location.reload(), 1500);
       } catch (err) {
         showToast(err.message, 'error');
       }

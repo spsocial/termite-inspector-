@@ -101,7 +101,11 @@ const API = {
     }
   },
 
-  get(url) { return this.request(url); },
+  get(url) {
+    // เพิ่ม cache-busting เพื่อป้องกัน browser/proxy cache
+    const sep = url.includes('?') ? '&' : '?';
+    return this.request(url + sep + '_t=' + Date.now());
+  },
   post(url, body) { return this.request(url, { method: 'POST', body: JSON.stringify(body) }); },
   put(url, body) { return this.request(url, { method: 'PUT', body: JSON.stringify(body) }); },
   del(url) { return this.request(url, { method: 'DELETE' }); },
@@ -267,6 +271,29 @@ function showLoading(container) {
   if (container) {
     container.innerHTML = '<div class="loading"><div class="spinner"></div>กำลังโหลด...</div>';
   }
+}
+
+// Full-screen loading overlay
+function showOverlay(msg = 'กำลังบันทึก...') {
+  let overlay = document.getElementById('loadingOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'loadingOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = `<div style="background:white;border-radius:16px;padding:32px 48px;text-align:center;box-shadow:0 20px 40px rgba(0,0,0,0.3);">
+      <div class="spinner" style="margin:0 auto 16px;"></div>
+      <p id="overlayMsg" style="font-size:16px;font-weight:500;color:var(--gray-700);">${msg}</p>
+    </div>`;
+    document.body.appendChild(overlay);
+  } else {
+    overlay.style.display = 'flex';
+    document.getElementById('overlayMsg').textContent = msg;
+  }
+}
+
+function hideOverlay() {
+  const overlay = document.getElementById('loadingOverlay');
+  if (overlay) overlay.style.display = 'none';
 }
 
 // ==================== Export Helper ====================

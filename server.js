@@ -11,6 +11,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+// ป้องกัน cache สำหรับ API responses
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  next();
+});
+
 // Static files (ก่อน auth เพื่อให้ login page โหลดได้)
 app.use(express.static(path.join(__dirname, 'public')));
 
