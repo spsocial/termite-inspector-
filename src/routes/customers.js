@@ -386,7 +386,7 @@ router.post('/:id/photos', upload.array('photos', 10), async (req, res) => {
     let uploaded = 0;
     for (const file of req.files) {
       // จำกัดขนาด 1MB ต่อรูป (base64 จะเป็น ~1.3MB ซึ่งยังอยู่ใน 50K limit ถ้าย่อ)
-      if (file.buffer.length > 1024 * 1024) continue;
+      if (file.buffer.length > 5 * 1024 * 1024) continue; // ข้ามไฟล์เกิน 5MB
 
       const b64 = file.buffer.toString('base64');
       const dataUrl = `data:${file.mimetype};base64,${b64}`;
@@ -402,7 +402,7 @@ router.post('/:id/photos', upload.array('photos', 10), async (req, res) => {
     }
 
     if (uploaded === 0) {
-      return res.status(400).json({ error: 'รูปใหญ่เกินไป กรุณาใช้รูปที่เล็กกว่า 1MB' });
+      return res.status(400).json({ error: 'รูปใหญ่เกินไป กรุณาลองใหม่' });
     }
 
     res.json({ success: true, count: uploaded });
