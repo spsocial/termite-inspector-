@@ -8,7 +8,7 @@ module.exports = {
 
   google: {
     serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    privateKey: (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+    privateKey: (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\\\n/g, '\n').replace(/\\n/g, '\n'),
     spreadsheetId: process.env.GOOGLE_SPREADSHEET_ID,
     driveFolderId: process.env.GOOGLE_DRIVE_FOLDER_ID,
   },
