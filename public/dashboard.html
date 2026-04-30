@@ -229,8 +229,7 @@
       const todayDate = new Date();
 
       const events = (dashboardData.calendarEvents || []).filter(e => {
-        const d = new Date(e.date);
-        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+        return e.month === currentMonth && e.year === currentYear;
       });
 
       let html = '<div class="calendar-grid">';

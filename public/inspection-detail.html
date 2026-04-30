@@ -112,7 +112,7 @@
       const c = i.customer || {};
       document.getElementById('pageSubtitle').textContent = `${i.id} - ${c.name || i.customerId}`;
 
-      const photos = i.photos ? i.photos.split(',').filter(Boolean) : [];
+      const photos = i.photos ? (i.photos.includes('|||') ? i.photos.split('|||') : i.photos.split(',')).filter(Boolean) : [];
       const isCompleted = i.status === 'completed';
 
       document.getElementById('content').innerHTML = `
@@ -252,16 +252,38 @@
       }
     }
 
+    // ย่อรูปอัตโนมัติ
+    function resizeImage(file, maxWidth = 800, quality = 0.6) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let w = img.width, h = img.height;
+            if (w > maxWidth) { h = (h * maxWidth) / w; w = maxWidth; }
+            canvas.width = w;
+            canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            canvas.toBlob(resolve, 'image/jpeg', quality);
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
     async function uploadPhotos(files) {
       if (!files || files.length === 0) return;
 
       const formData = new FormData();
       for (const file of files) {
-        formData.append('photos', file);
+        const resized = await resizeImage(file);
+        formData.append('photos', resized, file.name);
       }
 
       try {
-        showToast('กำลังอัพโหลด...', 'warning');
+        showToast('กำลังย่อและอัพโหลด...', 'warning');
         await API.upload(`/api/inspections/${inspId}/photos`, formData);
         showToast('อัพโหลดรูปเรียบร้อย');
         loadDetail();
