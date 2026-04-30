@@ -258,6 +258,19 @@ router.put('/:id/complete', async (req, res) => {
   }
 });
 
+// GET /api/inspections/:id/photos - ดึงรูปหลักฐานจากชีทแยก
+router.get('/:id/photos', async (req, res) => {
+  try {
+    const rows = await sheets.getRows(config.sheets.photos);
+    const photos = rows.slice(1)
+      .filter(r => r[1] === 'inspection' && r[2] === req.params.id)
+      .map(r => ({ id: r[0], data: r[3], createdAt: r[4] }));
+    res.json(photos);
+  } catch (err) {
+    res.json([]);
+  }
+});
+
 // DELETE /api/inspections/:id - ลบรอบตรวจเช็ค
 router.delete('/:id', async (req, res) => {
   try {

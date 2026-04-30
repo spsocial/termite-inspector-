@@ -19,7 +19,7 @@ router.get('/customers', async (req, res) => {
     let customers = rows.slice(1);
 
     if (statusFilter !== 'all') {
-      customers = customers.filter(r => r[11] === statusFilter);
+      customers = customers.filter(r => r[12] === statusFilter);
     }
 
     if (format === 'pdf') {

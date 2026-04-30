@@ -112,10 +112,16 @@
       const c = i.customer || {};
       document.getElementById('pageSubtitle').textContent = `${i.id} - ${c.name || i.customerId}`;
 
-      const photos = i.photos ? (i.photos.includes('|||') ? i.photos.split('|||') : i.photos.split(',')).filter(Boolean) : [];
       const isCompleted = i.status === 'completed';
 
       document.getElementById('content').innerHTML = `
+        <!-- ปุ่มย้อนกลับ -->
+        <div style="margin-bottom:16px;display:flex;gap:8px;">
+          <button class="btn btn-outline" onclick="history.back()">◀ ย้อนกลับ</button>
+          <a href="/inspections" class="btn btn-outline">📋 ตารางตรวจเช็ค</a>
+          <a href="/customer-form?id=${i.customerId}" class="btn btn-outline">👤 ข้อมูลลูกค้า</a>
+        </div>
+
         <div class="detail-grid">
           <!-- ข้อมูลลูกค้า -->
           <div class="card">
@@ -182,7 +188,11 @@
             <div class="form-row">
               <div class="form-group">
                 <label>ช่างผู้ตรวจ</label>
-                <input type="text" class="form-control" id="technician" value="${i.technician || ''}" ${isCompleted ? '' : ''}>
+                <select class="form-control" id="technician">
+                  <option value="">-- เลือกช่าง --</option>
+                  <option value="__other">อื่นๆ (พิมพ์เอง)</option>
+                </select>
+                <input type="text" class="form-control" id="technicianOther" placeholder="พิมพ์ชื่อช่าง" style="display:none;margin-top:8px;" value="${i.technician || ''}">
               </div>
             </div>
             <div class="form-group">
@@ -205,12 +215,7 @@
             <input type="file" id="photoInput" multiple accept="image/*" capture="environment" style="display:none" onchange="uploadPhotos(this.files)">
 
             <div class="photo-grid" id="photoGrid">
-              ${photos.map(p => `
-                <div class="photo-item">
-                  <img src="${p}" onclick="window.open('${p}', '_blank')" alt="รูปถ่าย" loading="lazy"
-                       onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22150%22 height=%22150%22><text x=%2240%22 y=%2280%22 font-size=%2240%22>📷</text></svg>'">
-                </div>
-              `).join('')}
+              <div class="loading"><div class="spinner"></div>กำลังโหลดรูป...</div>
             </div>
           </div>
         </div>
@@ -225,12 +230,63 @@
         area.classList.remove('dragover');
         if (e.dataTransfer.files.length > 0) uploadPhotos(e.dataTransfer.files);
       });
+
+      // โหลดรายชื่อช่างสำหรับ dropdown
+      loadTechDropdown(i.technician);
+
+      // โหลดรูปจากชีทแยก
+      loadPhotos();
+    }
+
+    async function loadTechDropdown(currentTech) {
+      try {
+        const techs = await API.get('/api/technician-list');
+        const sel = document.getElementById('technician');
+        techs.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.name;
+          opt.textContent = `${t.name}${t.phone ? ' (' + t.phone + ')' : ''}`;
+          if (t.name === currentTech) opt.selected = true;
+          sel.insertBefore(opt, sel.lastElementChild); // ก่อน "อื่นๆ"
+        });
+        // ถ้าชื่อช่างปัจจุบันไม่อยู่ใน list ให้เลือก "อื่นๆ"
+        if (currentTech && !techs.find(t => t.name === currentTech)) {
+          sel.value = '__other';
+          document.getElementById('technicianOther').style.display = '';
+        }
+        sel.addEventListener('change', function() {
+          document.getElementById('technicianOther').style.display = this.value === '__other' ? '' : 'none';
+        });
+      } catch {}
+    }
+
+    async function loadPhotos() {
+      try {
+        const photos = await API.get(`/api/inspections/${inspId}/photos`);
+        const grid = document.getElementById('photoGrid');
+        if (photos.length === 0) {
+          grid.innerHTML = '<p style="color:var(--gray-400);padding:12px;">ยังไม่มีรูปถ่าย</p>';
+          return;
+        }
+        grid.innerHTML = photos.map(p => `
+          <div class="photo-item">
+            <img src="${p.data}" onclick="window.open(this.src, '_blank')" alt="รูปถ่าย" loading="lazy">
+          </div>
+        `).join('');
+      } catch {
+        document.getElementById('photoGrid').innerHTML = '<p style="color:var(--gray-400);padding:12px;">ไม่สามารถโหลดรูปได้</p>';
+      }
+    }
+
+    function getSelectedTech() {
+      const sel = document.getElementById('technician');
+      return sel.value === '__other' ? document.getElementById('technicianOther').value : sel.value;
     }
 
     async function saveDetails() {
       try {
         await API.put(`/api/inspections/${inspId}`, {
-          technician: document.getElementById('technician').value,
+          technician: getSelectedTech(),
           result: document.getElementById('result').value,
         });
         showToast('บันทึกข้อมูลเรียบร้อย');
@@ -242,7 +298,7 @@
     async function markComplete() {
       try {
         await API.put(`/api/inspections/${inspId}/complete`, {
-          technician: document.getElementById('technician').value,
+          technician: getSelectedTech(),
           result: document.getElementById('result').value,
         });
         showToast('บันทึกเสร็จสิ้นเรียบร้อย');
@@ -286,7 +342,7 @@
         showToast('กำลังย่อและอัพโหลด...', 'warning');
         await API.upload(`/api/inspections/${inspId}/photos`, formData);
         showToast('อัพโหลดรูปเรียบร้อย');
-        loadDetail();
+        loadPhotos(); // โหลดรูปใหม่
       } catch (err) {
         showToast(err.message, 'error');
       }
