@@ -183,8 +183,7 @@
         const opt = document.createElement('option');
         opt.value = val;
         opt.textContent = label;
-        // เลือกเดือนปัจจุบันเป็น default
-        if (offset === 0) opt.selected = true;
+        // ไม่ select เดือนไหนเป็น default — ให้ "ทุกเดือน" เป็นค่าเริ่มต้น
         select.appendChild(opt);
       }
     }
