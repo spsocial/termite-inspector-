@@ -390,21 +390,38 @@
       }
     }
 
+    // โหลดรายชื่อช่างสำหรับ dropdown
+    let techList = [];
+    async function loadTechList() {
+      try { techList = await API.get('/api/technician-list'); } catch { techList = []; }
+    }
+    loadTechList();
+
     async function quickComplete(id, customerName) {
-      // ถ้าเป็นช่าง ไม่ต้องใส่ชื่อ (ใช้จาก session อัตโนมัติ)
-      const techField = isTechnician()
-        ? `<div class="form-group">
-            <label>ช่างผู้ตรวจ</label>
-            <input type="text" class="form-control" id="qcTech" value="${currentDisplayName}" readonly style="background:var(--gray-100)">
-          </div>`
-        : `<div class="form-group">
-            <label>ช่างผู้ตรวจ</label>
-            <input type="text" class="form-control" id="qcTech" placeholder="ชื่อช่าง">
-          </div>`;
+      const techOptions = techList.map(t =>
+        `<option value="${t.name}">${t.name}${t.phone ? ' (' + t.phone + ')' : ''}</option>`
+      ).join('');
+
+      // วันที่ตรวจจริง — ให้เลือกได้ (default = วันนี้ ตามเวลาไทย)
+      const now = new Date();
+      const thai = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+      const todayStr = `${thai.getUTCFullYear()}-${String(thai.getUTCMonth()+1).padStart(2,'0')}-${String(thai.getUTCDate()).padStart(2,'0')}`;
 
       showModal('บันทึกผลตรวจเช็ค', `
         <p style="margin-bottom:16px"><strong>${customerName}</strong></p>
-        ${techField}
+        <div class="form-group">
+          <label>วันที่ตรวจจริง</label>
+          <input type="date" class="form-control" id="qcDate" value="${todayStr}">
+        </div>
+        <div class="form-group">
+          <label>ช่างผู้ตรวจ</label>
+          <select class="form-control" id="qcTech">
+            <option value="">-- เลือกช่าง --</option>
+            ${techOptions}
+            <option value="__other">อื่นๆ (พิมพ์เอง)</option>
+          </select>
+          <input type="text" class="form-control" id="qcTechOther" placeholder="พิมพ์ชื่อช่าง" style="display:none;margin-top:8px;">
+        </div>
         <div class="form-group">
           <label>ผลการตรวจ</label>
           <textarea class="form-control" id="qcResult" placeholder="ผลการตรวจ"></textarea>
@@ -413,13 +430,25 @@
         <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
         <button class="btn btn-success" onclick="confirmComplete('${id}')">✓ บันทึก</button>
       `);
+
+      // แสดงช่องพิมพ์เองถ้าเลือก "อื่นๆ"
+      document.getElementById('qcTech').addEventListener('change', function() {
+        document.getElementById('qcTechOther').style.display = this.value === '__other' ? '' : 'none';
+      });
     }
 
     async function confirmComplete(id) {
       try {
+        let techName = document.getElementById('qcTech').value;
+        if (techName === '__other') {
+          techName = document.getElementById('qcTechOther').value;
+        }
+        const actualDate = document.getElementById('qcDate').value;
+
         await API.put(`/api/inspections/${id}/complete`, {
-          technician: document.getElementById('qcTech').value,
+          technician: techName,
           result: document.getElementById('qcResult').value,
+          actualDate,
         });
         showToast('บันทึกเสร็จสิ้นเรียบร้อย');
         closeModal();

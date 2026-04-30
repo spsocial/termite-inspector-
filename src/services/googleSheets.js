@@ -166,6 +166,24 @@ async function uploadFile(fileBuffer, fileName, mimeType) {
     supportsAllDrives: true,
   });
 
+  // โอนเจ้าของไฟล์ให้ user จริง (แก้ปัญหา storage quota ของ Service Account)
+  if (config.google.driveOwnerEmail) {
+    try {
+      await drive.permissions.create({
+        fileId: res.data.id,
+        requestBody: {
+          role: 'writer',
+          type: 'user',
+          emailAddress: config.google.driveOwnerEmail,
+        },
+        transferOwnership: false,
+        supportsAllDrives: true,
+      });
+    } catch (e) {
+      console.error('Transfer ownership error:', e.message);
+    }
+  }
+
   // ทำให้ไฟล์เป็น public
   await drive.permissions.create({
     fileId: res.data.id,

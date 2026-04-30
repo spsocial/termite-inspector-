@@ -42,11 +42,18 @@ function parseThaiDate(str) {
   return isNaN(d.getTime()) ? null : d;
 }
 
-// แปลง Date → ISO string (ค.ศ.)
+// แปลง Date → ISO string (ค.ศ.) — ใช้ local timezone ไม่ใช่ UTC
 function toISO(date) {
   if (!date) return '';
-  if (typeof date === 'string') date = new Date(date);
-  return date.toISOString().split('T')[0];
+  if (typeof date === 'string') {
+    // ถ้าเป็น ISO string อยู่แล้ว (เช่น "2026-02-06") ส่งกลับเลย
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+    date = new Date(date);
+  }
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 // แปลง Date → Thai format สำหรับแสดง (เช่น "15 ม.ค. 2567")
@@ -83,10 +90,12 @@ function addMonths(date, months) {
   return result;
 }
 
-// วันนี้ (เวลา 00:00)
+// วันนี้ (เวลา 00:00 ตามเวลาไทย UTC+7)
 function today() {
   const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // แปลงเป็นเวลาไทย
+  const thai = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+  return new Date(thai.getUTCFullYear(), thai.getUTCMonth(), thai.getUTCDate());
 }
 
 // ต่างกี่วัน
@@ -97,9 +106,11 @@ function daysBetween(a, b) {
   return Math.round((d2 - d1) / msPerDay);
 }
 
-// สร้าง timestamp ปัจจุบัน
+// สร้าง timestamp ปัจจุบัน (เวลาไทย)
 function nowISO() {
-  return new Date().toISOString();
+  const now = new Date();
+  const thai = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+  return thai.toISOString().replace('Z', '+07:00');
 }
 
 module.exports = {

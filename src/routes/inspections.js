@@ -214,7 +214,7 @@ router.put('/:id/complete', async (req, res) => {
 
     if (rowIndex === -1) return res.status(404).json({ error: 'ไม่พบรายการตรวจเช็ค' });
 
-    const { result } = req.body;
+    const { result, actualDate } = req.body;
     // ชื่อช่าง: ใช้จาก session ถ้าเป็นช่าง, ถ้า admin ส่งมาในbody ก็ใช้
     let technician = req.body.technician;
     if (req.user?.role === 'technician') {
@@ -222,7 +222,7 @@ router.put('/:id/complete', async (req, res) => {
     }
 
     const now = nowISO();
-    const todayStr = toISO(today());
+    const todayStr = actualDate || toISO(today()); // ใช้วันที่ที่เลือก หรือวันนี้
 
     while (oldRow.length < 13) oldRow.push('');
     oldRow[4] = todayStr;
@@ -339,25 +339,23 @@ router.post('/:id/photos', upload.array('photos', 10), async (req, res) => {
 
     if (rowIndex === -1) return res.status(404).json({ error: 'ไม่พบรายการตรวจเช็ค' });
 
-    const uploadedLinks = [];
-
+    // เก็บเป็น base64 ใน Sheet แทน Google Drive
+    const base64Photos = [];
     for (const file of req.files) {
-      const result = await sheets.uploadFile(
-        file.buffer,
-        `${req.params.id}_${Date.now()}_${file.originalname}`,
-        file.mimetype
-      );
-      uploadedLinks.push(result.directLink);
+      if (file.buffer.length <= 500 * 1024) {
+        const b64 = file.buffer.toString('base64');
+        base64Photos.push(`data:${file.mimetype};base64,${b64}`);
+      }
     }
 
-    const existingPhotos = oldRow[8] ? oldRow[8].split(',') : [];
-    const allPhotos = [...existingPhotos, ...uploadedLinks];
-    oldRow[8] = allPhotos.join(',');
+    const existingPhotos = oldRow[8] ? oldRow[8].split('|||') : [];
+    const allPhotos = [...existingPhotos.filter(Boolean), ...base64Photos];
+    oldRow[8] = allPhotos.join('|||');
     oldRow[10] = nowISO();
 
     await sheets.updateRow(config.sheets.inspections, rowIndex, oldRow);
 
-    res.json({ success: true, photos: uploadedLinks });
+    res.json({ success: true, count: base64Photos.length });
   } catch (err) {
     console.error('POST /inspections/:id/photos error:', err);
     res.status(500).json({ error: 'เกิดข้อผิดพลาด: ' + err.message });

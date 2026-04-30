@@ -271,19 +271,34 @@
       renderCalendar();
     }
 
+    let dashTechList = [];
+    async function loadDashTechList() {
+      try { dashTechList = await API.get('/api/technician-list'); } catch { dashTechList = []; }
+    }
+    loadDashTechList();
+
     async function quickComplete(id) {
-      const techField = isTechnician()
-        ? `<div class="form-group">
-            <label>ช่างผู้ตรวจ</label>
-            <input type="text" class="form-control" id="qcTech" value="${currentDisplayName}" readonly style="background:var(--gray-100)">
-          </div>`
-        : `<div class="form-group">
-            <label>ช่างผู้ตรวจ</label>
-            <input type="text" class="form-control" id="qcTech" placeholder="ชื่อช่าง">
-          </div>`;
+      const techOptions = dashTechList.map(t =>
+        `<option value="${t.name}">${t.name}${t.phone ? ' (' + t.phone + ')' : ''}</option>`
+      ).join('');
+
+      const now = new Date();
+      const todayVal = todayISO();
 
       const modal = showModal('บันทึกผลตรวจเช็ค', `
-        ${techField}
+        <div class="form-group">
+          <label>วันที่ตรวจจริง</label>
+          <input type="date" class="form-control" id="qcDate" value="${todayVal}">
+        </div>
+        <div class="form-group">
+          <label>ช่างผู้ตรวจ</label>
+          <select class="form-control" id="qcTech">
+            <option value="">-- เลือกช่าง --</option>
+            ${techOptions}
+            <option value="__other">อื่นๆ (พิมพ์เอง)</option>
+          </select>
+          <input type="text" class="form-control" id="qcTechOther" placeholder="พิมพ์ชื่อช่าง" style="display:none;margin-top:8px;">
+        </div>
         <div class="form-group">
           <label>ผลการตรวจ</label>
           <textarea class="form-control" id="qcResult" placeholder="ผลการตรวจ (ไม่บังคับ)"></textarea>
@@ -292,14 +307,20 @@
         <button class="btn btn-secondary" onclick="closeModal()">ยกเลิก</button>
         <button class="btn btn-success" onclick="confirmComplete('${id}')">✓ บันทึกเสร็จสิ้น</button>
       `);
+
+      document.getElementById('qcTech').addEventListener('change', function() {
+        document.getElementById('qcTechOther').style.display = this.value === '__other' ? '' : 'none';
+      });
     }
 
     async function confirmComplete(id) {
-      const technician = document.getElementById('qcTech').value;
+      let technician = document.getElementById('qcTech').value;
+      if (technician === '__other') technician = document.getElementById('qcTechOther').value;
       const result = document.getElementById('qcResult').value;
+      const actualDate = document.getElementById('qcDate').value;
 
       try {
-        await API.put(`/api/inspections/${id}/complete`, { technician, result });
+        await API.put(`/api/inspections/${id}/complete`, { technician, result, actualDate });
         showToast('บันทึกเสร็จสิ้นเรียบร้อย');
         closeModal();
         loadDashboard();

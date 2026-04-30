@@ -11,6 +11,7 @@ module.exports = {
     privateKey: (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\\\n/g, '\n').replace(/\\n/g, '\n'),
     spreadsheetId: process.env.GOOGLE_SPREADSHEET_ID,
     driveFolderId: process.env.GOOGLE_DRIVE_FOLDER_ID,
+    driveOwnerEmail: process.env.GOOGLE_DRIVE_OWNER_EMAIL,
   },
 
   telegram: {

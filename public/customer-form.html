@@ -262,8 +262,8 @@
         // แสดงรูปบ้านที่มีอยู่แล้ว
         if (c.photos) {
           const container = document.getElementById('existingPhotos');
-          const links = c.photos.split(',').filter(Boolean);
-          container.innerHTML = links.map(url =>
+          const photos = c.photos.includes('|||') ? c.photos.split('|||') : c.photos.split(',');
+          container.innerHTML = photos.filter(Boolean).map(url =>
             `<a href="${url}" target="_blank"><img src="${url}" style="width:100px;height:100px;object-fit:cover;border-radius:8px;border:1px solid var(--gray-200)"></a>`
           ).join('');
         }
@@ -304,15 +304,14 @@
       `).join('');
     }
 
-    // แปลง วัน/เดือน/ปีพ.ศ. → ISO string ค.ศ.
+    // แปลง วัน/เดือน/ปีพ.ศ. → ISO string ค.ศ. (ไม่ใช้ toISOString เพราะ timezone เลื่อน)
     function getContractStartISO() {
       const day = parseInt(document.getElementById('startDay').value);
       const month = parseInt(document.getElementById('startMonth').value);
       const yearBE = parseInt(document.getElementById('startYear').value);
       if (!day || !month || !yearBE) return '';
       const yearCE = yearBE - 543;
-      const d = new Date(yearCE, month - 1, day);
-      return d.toISOString().split('T')[0];
+      return `${yearCE}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     }
 
     function calcEndDate() {
@@ -324,9 +323,9 @@
         document.getElementById('contractEnd').value = '';
         document.getElementById('contractEndDisplay').value = 'ไม่รับประกัน';
       } else if (iso && years) {
-        const d = new Date(iso);
-        d.setFullYear(d.getFullYear() + years);
-        const endISO = d.toISOString().split('T')[0];
+        const parts = iso.split('-');
+        const endY = parseInt(parts[0]) + years;
+        const endISO = `${endY}-${parts[1]}-${parts[2]}`;
         document.getElementById('contractEnd').value = endISO;
         document.getElementById('contractEndDisplay').value = toThaiDate(endISO);
       }

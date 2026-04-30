@@ -39,6 +39,22 @@ app.use('/api/export', adminOnly, require('./src/routes/export'));
 app.use('/api/history', adminOnly, require('./src/routes/history'));
 app.use('/api/technicians', adminOnly, require('./src/routes/technicians'));
 
+// รายชื่อช่างสำหรับ dropdown (ทุกคนเข้าถึงได้)
+app.get('/api/technician-list', async (req, res) => {
+  try {
+    const sheets = require('./src/services/googleSheets');
+    const config = require('./src/config');
+    const rows = await sheets.getRows(config.sheets.technicians);
+    if (rows.length <= 1) return res.json([]);
+    const techs = rows.slice(1)
+      .filter(r => r[4] === 'active')
+      .map(r => ({ id: r[0], name: r[1], phone: r[3] || '' }));
+    res.json(techs);
+  } catch (err) {
+    res.json([]);
+  }
+});
+
 // Telegram test endpoint (admin only)
 app.post('/api/telegram/test', adminOnly, async (req, res) => {
   try {

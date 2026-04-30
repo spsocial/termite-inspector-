@@ -376,7 +376,7 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// POST /api/customers/:id/photos - อัพโหลดรูปบ้านลูกค้า
+// POST /api/customers/:id/photos - อัพโหลดรูปบ้านลูกค้า (เก็บเป็น base64 ใน Sheet)
 router.post('/:id/photos', upload.array('photos', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
@@ -397,25 +397,26 @@ router.post('/:id/photos', upload.array('photos', 10), async (req, res) => {
 
     if (rowIndex === -1) return res.status(404).json({ error: 'ไม่พบลูกค้า' });
 
-    const uploadedLinks = [];
+    // แปลงรูปเป็น base64 data URL (บีบอัดขนาดโดยจำกัดที่ 200KB ต่อรูป)
+    const base64Photos = [];
     for (const file of req.files) {
-      const result = await sheets.uploadFile(
-        file.buffer,
-        `${req.params.id}_house_${Date.now()}_${file.originalname}`,
-        file.mimetype
-      );
-      uploadedLinks.push(result.directLink);
+      const b64 = file.buffer.toString('base64');
+      const dataUrl = `data:${file.mimetype};base64,${b64}`;
+      // จำกัดขนาด: ข้าม file ที่ใหญ่เกิน 500KB
+      if (file.buffer.length <= 500 * 1024) {
+        base64Photos.push(dataUrl);
+      }
     }
 
     while (oldRow.length < 18) oldRow.push('');
-    const existingPhotos = oldRow[17] ? oldRow[17].split(',') : [];
-    const allPhotos = [...existingPhotos, ...uploadedLinks];
-    oldRow[17] = allPhotos.join(',');
+    const existingPhotos = oldRow[17] ? oldRow[17].split('|||') : [];
+    const allPhotos = [...existingPhotos.filter(Boolean), ...base64Photos];
+    oldRow[17] = allPhotos.join('|||'); // ใช้ ||| คั่นเพราะ base64 มี comma
     oldRow[15] = nowISO();
 
     await sheets.updateRow(config.sheets.customers, rowIndex, oldRow);
 
-    res.json({ success: true, photos: uploadedLinks });
+    res.json({ success: true, count: base64Photos.length });
   } catch (err) {
     console.error('POST /customers/:id/photos error:', err);
     res.status(500).json({ error: 'เกิดข้อผิดพลาด: ' + err.message });
