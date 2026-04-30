@@ -7,33 +7,65 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
   <style>
-    .inspection-card {
+    .customer-group {
       border: 1px solid var(--gray-200);
       border-radius: var(--radius);
-      padding: 16px;
       margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      gap: 16px;
+      overflow: hidden;
       transition: all 0.2s;
     }
-    .inspection-card:hover { box-shadow: var(--shadow); }
-    .inspection-card.overdue { border-left: 4px solid var(--danger); background: var(--danger-light); }
-    .inspection-card.pending-soon { border-left: 4px solid var(--warning); }
-    .inspection-card.completed { border-left: 4px solid var(--success); opacity: 0.7; }
-    .inspection-card .checkbox {
-      width: 24px; height: 24px; border-radius: 50%;
+    .customer-group:hover { box-shadow: var(--shadow); }
+    .customer-group.has-overdue { border-left: 4px solid var(--danger); }
+    .customer-group.all-completed { border-left: 4px solid var(--success); opacity: 0.75; }
+    .customer-header {
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      user-select: none;
+      background: var(--white);
+      transition: background 0.15s;
+    }
+    .customer-header:hover { background: var(--gray-50, #f9fafb); }
+    .customer-header .arrow {
+      font-size: 12px;
+      transition: transform 0.2s;
+      color: var(--gray-400);
+      flex-shrink: 0;
+    }
+    .customer-group.open .customer-header .arrow { transform: rotate(90deg); }
+    .customer-header .info { flex: 1; }
+    .customer-header .info h4 { font-size: 15px; font-weight: 600; margin: 0; }
+    .customer-header .info .meta { font-size: 13px; color: var(--gray-500); margin-top: 2px; }
+    .customer-header .badges { display: flex; gap: 6px; flex-wrap: wrap; }
+    .customer-rounds {
+      display: none;
+      border-top: 1px solid var(--gray-200);
+      background: var(--gray-50, #f9fafb);
+    }
+    .customer-group.open .customer-rounds { display: block; }
+    .round-item {
+      padding: 10px 16px 10px 44px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--gray-100, #f3f4f6);
+      font-size: 14px;
+    }
+    .round-item:last-child { border-bottom: none; }
+    .round-item.overdue { background: rgba(220,38,38,0.05); }
+    .round-item .round-info { flex: 1; }
+    .round-item .checkbox {
+      width: 22px; height: 22px; border-radius: 50%;
       border: 2px solid var(--gray-300); cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0; transition: all 0.2s;
+      flex-shrink: 0; transition: all 0.2s; font-size: 12px;
     }
-    .inspection-card .checkbox:hover { border-color: var(--success); }
-    .inspection-card .checkbox.checked {
+    .round-item .checkbox:hover { border-color: var(--success); }
+    .round-item .checkbox.checked {
       background: var(--success); border-color: var(--success); color: white;
     }
-    .inspection-card .info { flex: 1; }
-    .inspection-card .info h4 { font-size: 15px; font-weight: 600; }
-    .inspection-card .info .meta { font-size: 13px; color: var(--gray-500); margin-top: 4px; }
     .batch-bar {
       position: fixed; bottom: 0; left: 260px; right: 0;
       background: var(--primary); color: white; padding: 16px 24px;
@@ -236,64 +268,96 @@
         return;
       }
 
-      el.innerHTML = data.map(i => {
-        const isOverdue = i.status === 'overdue' || (i.status === 'pending' && i.daysUntilDue < 0);
-        const isPendingSoon = !isOverdue && i.status === 'pending' && i.daysUntilDue <= 7;
-        const isCompleted = i.status === 'completed';
-        const isSelected = selectedIds.has(i.id);
-        const isMyClaim = i.claimedBy === currentTechId && currentTechId;
-        const isClaimedByOther = i.claimedBy && !isMyClaim;
-
-        let cardClass = 'inspection-card';
-        if (isOverdue) cardClass += ' overdue';
-        else if (isPendingSoon) cardClass += ' pending-soon';
-        else if (isCompleted) cardClass += ' completed';
-
-        // แสดงข้อมูลผู้รับงาน
-        let claimInfo = '';
-        if (i.claimedByName) {
-          claimInfo = ` | <span style="color:var(--primary);font-weight:600">👷 ${i.claimedByName}</span>`;
+      // จัดกลุ่มตามลูกค้า
+      const groups = {};
+      data.forEach(i => {
+        if (!groups[i.customerId]) {
+          groups[i.customerId] = {
+            customerId: i.customerId,
+            customerName: i.customerName,
+            customerPhone: i.customerPhone,
+            rounds: [],
+          };
         }
+        groups[i.customerId].rounds.push(i);
+      });
 
-        // ปุ่มรับงาน/ยกเลิกรับ
-        let claimBtn = '';
-        if (!isCompleted) {
-          if (isMyClaim) {
-            claimBtn = `<button class="btn btn-sm" style="background:var(--warning);color:#fff;" onclick="claimJob('${i.id}')">ยกเลิกรับ</button>`;
-          } else if (!i.claimedBy) {
-            claimBtn = `<button class="btn btn-sm btn-primary" onclick="claimJob('${i.id}')">รับงาน</button>`;
+      el.innerHTML = Object.values(groups).map(g => {
+        const overdueCount = g.rounds.filter(i => i.status === 'overdue' || (i.status === 'pending' && i.daysUntilDue < 0)).length;
+        const pendingCount = g.rounds.filter(i => i.status === 'pending' && i.daysUntilDue >= 0).length;
+        const completedCount = g.rounds.filter(i => i.status === 'completed').length;
+        const allDone = completedCount === g.rounds.length;
+
+        let groupClass = 'customer-group';
+        if (overdueCount > 0) groupClass += ' has-overdue';
+        else if (allDone) groupClass += ' all-completed';
+
+        // สรุป badges
+        let badges = '';
+        if (overdueCount > 0) badges += `<span class="badge badge-danger">เกินกำหนด ${overdueCount}</span>`;
+        if (pendingCount > 0) badges += `<span class="badge badge-warning">รอ ${pendingCount}</span>`;
+        if (completedCount > 0) badges += `<span class="badge badge-success">เสร็จ ${completedCount}</span>`;
+
+        // แต่ละรอบ
+        const roundsHTML = g.rounds.map(i => {
+          const isOverdue = i.status === 'overdue' || (i.status === 'pending' && i.daysUntilDue < 0);
+          const isCompleted = i.status === 'completed';
+          const isSelected = selectedIds.has(i.id);
+          const isMyClaim = i.claimedBy === currentTechId && currentTechId;
+
+          let claimBtn = '';
+          if (!isCompleted) {
+            if (isMyClaim) {
+              claimBtn = `<button class="btn btn-sm" style="background:var(--warning);color:#fff;font-size:12px;padding:2px 8px;" onclick="event.stopPropagation();claimJob('${i.id}')">ยกเลิกรับ</button>`;
+            } else if (!i.claimedBy) {
+              claimBtn = `<button class="btn btn-sm btn-primary" style="font-size:12px;padding:2px 8px;" onclick="event.stopPropagation();claimJob('${i.id}')">รับงาน</button>`;
+            }
           }
-        }
+
+          return `
+            <div class="round-item ${isOverdue ? 'overdue' : ''}">
+              ${!isCompleted ? `
+                <div class="checkbox ${isSelected ? 'checked' : ''}" onclick="event.stopPropagation();toggleSelect('${i.id}', this)">
+                  ${isSelected ? '✓' : ''}
+                </div>
+              ` : '<div style="width:22px;text-align:center;color:var(--success)">✓</div>'}
+              <div class="round-info">
+                <span style="font-weight:600">รอบ ${i.round}</span>
+                <span style="color:var(--gray-500);margin-left:8px">กำหนด ${toThaiDate(i.dueDate)}</span>
+                ${i.actualDate ? `<span style="color:var(--gray-500);margin-left:8px">ตรวจจริง ${toThaiDate(i.actualDate)}</span>` : ''}
+                ${i.technician ? `<span style="margin-left:8px">👷 ${i.technician}</span>` : ''}
+                ${i.claimedByName ? `<span style="color:var(--primary);margin-left:8px">📌 ${i.claimedByName}</span>` : ''}
+              </div>
+              <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;">
+                ${isOverdue ? `<span class="badge badge-danger" style="font-size:11px">เกิน ${Math.abs(i.daysUntilDue)} วัน</span>` : ''}
+                ${!isOverdue && !isCompleted && i.daysUntilDue !== null && i.daysUntilDue <= 7 ? daysLabel(i.daysUntilDue) : ''}
+                ${claimBtn}
+                ${!isCompleted ? `<button class="btn btn-sm btn-success" style="font-size:12px;padding:2px 8px;" onclick="event.stopPropagation();quickComplete('${i.id}','${i.customerName.replace(/'/g,"\\'")}')">✓</button>` : ''}
+                <a href="/inspection-detail?id=${i.id}" class="btn btn-sm btn-outline" style="font-size:12px;padding:2px 8px;" onclick="event.stopPropagation()">ดู</a>
+              </div>
+            </div>
+          `;
+        }).join('');
 
         return `
-          <div class="${cardClass}">
-            ${!isCompleted ? `
-              <div class="checkbox ${isSelected ? 'checked' : ''}" onclick="toggleSelect('${i.id}', this)">
-                ${isSelected ? '✓' : ''}
+          <div class="${groupClass}" id="group-${g.customerId}">
+            <div class="customer-header" onclick="toggleGroup('${g.customerId}')">
+              <span class="arrow">▶</span>
+              <div class="info">
+                <h4>${g.customerName}</h4>
+                <div class="meta">${g.customerId} | ${g.rounds.length} รอบ${g.customerPhone ? ' | ' + g.customerPhone : ''}</div>
               </div>
-            ` : '<div style="width:24px"></div>'}
-            <div class="info">
-              <h4>${i.customerName}</h4>
-              <div class="meta">
-                ${i.id} | รอบที่ ${i.round} | กำหนด ${toThaiDate(i.dueDate)}
-                ${i.actualDate ? ` | ตรวจจริง ${toThaiDate(i.actualDate)}` : ''}
-                ${i.technician ? ` | ช่าง: ${i.technician}` : ''}
-                ${claimInfo}
-              </div>
+              <div class="badges">${badges}</div>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-              ${isOverdue ? `<span class="badge badge-danger">เกิน ${Math.abs(i.daysUntilDue)} วัน</span>` : ''}
-              ${isPendingSoon ? daysLabel(i.daysUntilDue) : ''}
-              ${isCompleted ? statusBadge('completed') : ''}
-              ${claimBtn}
-              ${!isCompleted ? `
-                <button class="btn btn-sm btn-success" onclick="quickComplete('${i.id}', '${i.customerName}')">✓ เสร็จ</button>
-              ` : ''}
-              <a href="/inspection-detail?id=${i.id}" class="btn btn-sm btn-outline">ดู</a>
-            </div>
+            <div class="customer-rounds">${roundsHTML}</div>
           </div>
         `;
       }).join('');
+    }
+
+    function toggleGroup(customerId) {
+      const group = document.getElementById('group-' + customerId);
+      group.classList.toggle('open');
     }
 
     function filterTab(status, el) {
