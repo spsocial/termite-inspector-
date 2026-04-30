@@ -339,23 +339,27 @@ router.post('/:id/photos', upload.array('photos', 10), async (req, res) => {
 
     if (rowIndex === -1) return res.status(404).json({ error: 'ไม่พบรายการตรวจเช็ค' });
 
-    // เก็บเป็น base64 ใน Sheet แทน Google Drive
-    const base64Photos = [];
+    // เก็บรูปแยกชีท 1 รูป = 1 แถว
+    let uploaded = 0;
     for (const file of req.files) {
-      if (file.buffer.length <= 500 * 1024) {
-        const b64 = file.buffer.toString('base64');
-        base64Photos.push(`data:${file.mimetype};base64,${b64}`);
-      }
+      if (file.buffer.length > 1024 * 1024) continue;
+
+      const b64 = file.buffer.toString('base64');
+      const dataUrl = `data:${file.mimetype};base64,${b64}`;
+      if (dataUrl.length > 49000) continue;
+
+      const photoId = await sheets.generateId(config.sheets.photos, 'P');
+      await sheets.appendRow(config.sheets.photos, [
+        photoId, 'inspection', req.params.id, dataUrl, nowISO(),
+      ]);
+      uploaded++;
     }
 
-    const existingPhotos = oldRow[8] ? oldRow[8].split('|||') : [];
-    const allPhotos = [...existingPhotos.filter(Boolean), ...base64Photos];
-    oldRow[8] = allPhotos.join('|||');
-    oldRow[10] = nowISO();
+    if (uploaded === 0) {
+      return res.status(400).json({ error: 'รูปใหญ่เกินไป กรุณาใช้รูปที่เล็กกว่า 1MB' });
+    }
 
-    await sheets.updateRow(config.sheets.inspections, rowIndex, oldRow);
-
-    res.json({ success: true, count: base64Photos.length });
+    res.json({ success: true, count: uploaded });
   } catch (err) {
     console.error('POST /inspections/:id/photos error:', err);
     res.status(500).json({ error: 'เกิดข้อผิดพลาด: ' + err.message });

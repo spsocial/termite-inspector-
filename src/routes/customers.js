@@ -376,50 +376,52 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// POST /api/customers/:id/photos - อัพโหลดรูปบ้านลูกค้า (เก็บเป็น base64 ใน Sheet)
+// POST /api/customers/:id/photos - อัพโหลดรูปบ้านลูกค้า (เก็บแยกชีท 1 รูป = 1 แถว)
 router.post('/:id/photos', upload.array('photos', 10), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'กรุณาเลือกรูปภาพ' });
     }
 
-    const rows = await sheets.getRows(config.sheets.customers);
-    let rowIndex = -1;
-    let oldRow = null;
-
-    for (let i = 1; i < rows.length; i++) {
-      if (rows[i][0] === req.params.id) {
-        rowIndex = i + 1;
-        oldRow = rows[i];
-        break;
-      }
-    }
-
-    if (rowIndex === -1) return res.status(404).json({ error: 'ไม่พบลูกค้า' });
-
-    // แปลงรูปเป็น base64 data URL (บีบอัดขนาดโดยจำกัดที่ 200KB ต่อรูป)
-    const base64Photos = [];
+    let uploaded = 0;
     for (const file of req.files) {
+      // จำกัดขนาด 1MB ต่อรูป (base64 จะเป็น ~1.3MB ซึ่งยังอยู่ใน 50K limit ถ้าย่อ)
+      if (file.buffer.length > 1024 * 1024) continue;
+
       const b64 = file.buffer.toString('base64');
       const dataUrl = `data:${file.mimetype};base64,${b64}`;
-      // จำกัดขนาด: ข้าม file ที่ใหญ่เกิน 500KB
-      if (file.buffer.length <= 500 * 1024) {
-        base64Photos.push(dataUrl);
-      }
+
+      // ถ้า base64 เกิน 49000 ตัวอักษร ข้ามไป
+      if (dataUrl.length > 49000) continue;
+
+      const photoId = await sheets.generateId(config.sheets.photos, 'P');
+      await sheets.appendRow(config.sheets.photos, [
+        photoId, 'customer', req.params.id, dataUrl, nowISO(),
+      ]);
+      uploaded++;
     }
 
-    while (oldRow.length < 18) oldRow.push('');
-    const existingPhotos = oldRow[17] ? oldRow[17].split('|||') : [];
-    const allPhotos = [...existingPhotos.filter(Boolean), ...base64Photos];
-    oldRow[17] = allPhotos.join('|||'); // ใช้ ||| คั่นเพราะ base64 มี comma
-    oldRow[15] = nowISO();
+    if (uploaded === 0) {
+      return res.status(400).json({ error: 'รูปใหญ่เกินไป กรุณาใช้รูปที่เล็กกว่า 1MB' });
+    }
 
-    await sheets.updateRow(config.sheets.customers, rowIndex, oldRow);
-
-    res.json({ success: true, count: base64Photos.length });
+    res.json({ success: true, count: uploaded });
   } catch (err) {
     console.error('POST /customers/:id/photos error:', err);
     res.status(500).json({ error: 'เกิดข้อผิดพลาด: ' + err.message });
+  }
+});
+
+// GET /api/customers/:id/photos - ดึงรูปบ้านลูกค้า
+router.get('/:id/photos', async (req, res) => {
+  try {
+    const rows = await sheets.getRows(config.sheets.photos);
+    const photos = rows.slice(1)
+      .filter(r => r[1] === 'customer' && r[2] === req.params.id)
+      .map(r => ({ id: r[0], data: r[3], createdAt: r[4] }));
+    res.json(photos);
+  } catch (err) {
+    res.json([]);
   }
 });
 

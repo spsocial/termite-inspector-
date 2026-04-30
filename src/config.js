@@ -24,5 +24,6 @@ module.exports = {
     inspections: 'ตรวจเช็ค',
     auditLog: 'ประวัติแก้ไข',
     technicians: 'ช่าง',
+    photos: 'รูปถ่าย',
   },
 };

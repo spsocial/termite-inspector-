@@ -210,7 +210,7 @@ async function ensureSheets() {
   });
 
   const existingSheets = res.data.sheets.map(s => s.properties.title);
-  const requiredSheets = [config.sheets.customers, config.sheets.inspections, config.sheets.auditLog, config.sheets.technicians];
+  const requiredSheets = [config.sheets.customers, config.sheets.inspections, config.sheets.auditLog, config.sheets.technicians, config.sheets.photos];
 
   for (const sheetName of requiredSheets) {
     if (!existingSheets.includes(sheetName)) {
@@ -247,6 +247,10 @@ async function ensureSheets() {
         await appendRow(sheetName, [
           'รหัสช่าง', 'ชื่อ', 'PIN', 'เบอร์โทร',
           'สถานะ', 'created_at', 'updated_at',
+        ]);
+      } else if (sheetName === config.sheets.photos) {
+        await appendRow(sheetName, [
+          'รหัส', 'ประเภท', 'รหัสอ้างอิง', 'ข้อมูลรูป', 'created_at',
         ]);
       }
     }

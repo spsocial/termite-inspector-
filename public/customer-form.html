@@ -259,14 +259,17 @@
         document.getElementById('notes').value = c.notes;
         document.getElementById('googleMap').value = c.googleMap || '';
 
-        // แสดงรูปบ้านที่มีอยู่แล้ว
-        if (c.photos) {
-          const container = document.getElementById('existingPhotos');
-          const photos = c.photos.includes('|||') ? c.photos.split('|||') : c.photos.split(',');
-          container.innerHTML = photos.filter(Boolean).map(url =>
-            `<a href="${url}" target="_blank"><img src="${url}" style="width:100px;height:100px;object-fit:cover;border-radius:8px;border:1px solid var(--gray-200)"></a>`
-          ).join('');
-        }
+        // โหลดรูปบ้านจากชีทแยก
+        try {
+          const photos = await API.get(`/api/customers/${editId}/photos`);
+          if (photos.length > 0) {
+            const container = document.getElementById('existingPhotos');
+            container.innerHTML = photos.map(p =>
+              `<a href="${p.data}" target="_blank"><img src="${p.data}" style="width:100px;height:100px;object-fit:cover;border-radius:8px;border:1px solid var(--gray-200)"></a>`
+            ).join('');
+          }
+        } catch {}
+
 
         // แสดงลิงก์ Google Map ถ้ามี
         if (c.googleMap) {
