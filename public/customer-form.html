@@ -94,9 +94,28 @@
 
             <div class="form-row">
               <div class="form-group">
-                <label>วันทำสัญญา * <span id="contractStartThai" style="color:var(--primary);font-weight:600;"></span></label>
-                <input type="date" class="form-control" id="contractStart" required onchange="calcEndDate(); showThaiDate()">
-                <small style="color:var(--gray-500)">ระบบใช้ ค.ศ. กรอก ค.ศ. ได้เลย จะแสดง พ.ศ. ให้อัตโนมัติ (ค.ศ.+543=พ.ศ.)</small>
+                <label>วันทำสัญญา * (กรอกเป็น พ.ศ.)</label>
+                <div style="display:flex;gap:8px;">
+                  <input type="number" class="form-control" id="startDay" placeholder="วัน" min="1" max="31" required style="width:80px;">
+                  <select class="form-control" id="startMonth" required style="width:auto;">
+                    <option value="">-- เดือน --</option>
+                    <option value="1">ม.ค.</option>
+                    <option value="2">ก.พ.</option>
+                    <option value="3">มี.ค.</option>
+                    <option value="4">เม.ย.</option>
+                    <option value="5">พ.ค.</option>
+                    <option value="6">มิ.ย.</option>
+                    <option value="7">ก.ค.</option>
+                    <option value="8">ส.ค.</option>
+                    <option value="9">ก.ย.</option>
+                    <option value="10">ต.ค.</option>
+                    <option value="11">พ.ย.</option>
+                    <option value="12">ธ.ค.</option>
+                  </select>
+                  <input type="number" class="form-control" id="startYear" placeholder="ปี พ.ศ." required style="width:120px;" oninput="calcEndDate()">
+                </div>
+                <small style="color:var(--gray-500)">ตัวอย่าง: 12 / ก.พ. / 2569</small>
+                <input type="hidden" id="contractStart">
               </div>
             </div>
 
@@ -123,8 +142,9 @@
 
             <div class="form-row">
               <div class="form-group">
-                <label>วันหมดสัญญา (คำนวณอัตโนมัติ) <span id="contractEndThai" style="color:var(--primary);font-weight:600;"></span></label>
-                <input type="date" class="form-control" id="contractEnd" readonly style="background:var(--gray-100);">
+                <label>วันหมดสัญญา (คำนวณอัตโนมัติ)</label>
+                <input type="text" class="form-control" id="contractEndDisplay" readonly style="background:var(--gray-100);">
+                <input type="hidden" id="contractEnd">
               </div>
               <div class="form-group">
                 <label>จำนวนรอบตรวจเช็ค</label>
@@ -227,6 +247,10 @@
         document.getElementById('price').value = c.price;
         document.getElementById('contractStart').value = c.contractStart;
         document.getElementById('contractEnd').value = c.contractEnd;
+        setThaiDateFields(c.contractStart);
+        if (c.contractEnd) {
+          document.getElementById('contractEndDisplay').value = toThaiDate(c.contractEnd);
+        }
         document.getElementById('warrantyYears').value = c.warrantyYears || '3';
         document.getElementById('inspectionIntervalMonths').value = c.inspectionIntervalMonths || '4';
         document.getElementById('status').value = c.status;
@@ -251,7 +275,6 @@
         }
 
         calcRounds();
-        showThaiDate();
         renderInspections(c.inspections || []);
       } catch (err) {
         showToast(err.message, 'error');
@@ -279,19 +302,33 @@
       `).join('');
     }
 
+    // แปลง วัน/เดือน/ปีพ.ศ. → ISO string ค.ศ.
+    function getContractStartISO() {
+      const day = parseInt(document.getElementById('startDay').value);
+      const month = parseInt(document.getElementById('startMonth').value);
+      const yearBE = parseInt(document.getElementById('startYear').value);
+      if (!day || !month || !yearBE) return '';
+      const yearCE = yearBE - 543;
+      const d = new Date(yearCE, month - 1, day);
+      return d.toISOString().split('T')[0];
+    }
+
     function calcEndDate() {
-      const start = document.getElementById('contractStart').value;
+      const iso = getContractStartISO();
+      document.getElementById('contractStart').value = iso;
+
       const years = parseInt(document.getElementById('warrantyYears').value);
       if (years === 0) {
         document.getElementById('contractEnd').value = '';
-        document.getElementById('contractEnd').placeholder = 'ไม่รับประกัน';
-      } else if (start && years) {
-        const d = new Date(start);
+        document.getElementById('contractEndDisplay').value = 'ไม่รับประกัน';
+      } else if (iso && years) {
+        const d = new Date(iso);
         d.setFullYear(d.getFullYear() + years);
-        document.getElementById('contractEnd').value = d.toISOString().split('T')[0];
+        const endISO = d.toISOString().split('T')[0];
+        document.getElementById('contractEnd').value = endISO;
+        document.getElementById('contractEndDisplay').value = toThaiDate(endISO);
       }
       calcRounds();
-      showThaiDate();
     }
 
     function calcRounds() {
@@ -369,10 +406,17 @@
     });
 
     function showRenewModal() {
+      const now = new Date();
       showModal('ต่อสัญญา', `
         <div class="form-group">
-          <label>วันทำสัญญาใหม่ *</label>
-          <input type="date" class="form-control" id="renewStart" value="${todayISO()}">
+          <label>วันทำสัญญาใหม่ * (พ.ศ.)</label>
+          <div style="display:flex;gap:8px;">
+            <input type="number" class="form-control" id="renewDay" value="${now.getDate()}" min="1" max="31" style="width:80px;">
+            <select class="form-control" id="renewMonth" style="width:auto;">
+              ${THAI_MONTHS.map((m, i) => `<option value="${i + 1}" ${i === now.getMonth() ? 'selected' : ''}>${m}</option>`).join('')}
+            </select>
+            <input type="number" class="form-control" id="renewYear" value="${now.getFullYear() + 543}" style="width:120px;">
+          </div>
         </div>
         <div class="form-group">
           <label>รอบรับประกัน (ปี) *</label>
@@ -400,8 +444,13 @@
 
     async function confirmRenew() {
       try {
+        const rDay = parseInt(document.getElementById('renewDay').value);
+        const rMonth = parseInt(document.getElementById('renewMonth').value);
+        const rYear = parseInt(document.getElementById('renewYear').value) - 543;
+        const renewISO = new Date(rYear, rMonth - 1, rDay).toISOString().split('T')[0];
+
         const result = await API.post(`/api/customers/${editId}/renew`, {
-          newContractStart: document.getElementById('renewStart').value,
+          newContractStart: renewISO,
           warrantyYears: document.getElementById('renewYears').value,
           inspectionIntervalMonths: document.getElementById('renewInterval').value,
         });
@@ -413,22 +462,13 @@
       }
     }
 
-    function showThaiDate() {
-      const val = document.getElementById('contractStart').value;
-      const el = document.getElementById('contractStartThai');
-      if (val) {
-        el.textContent = '(พ.ศ. ' + toThaiDate(val) + ')';
-      } else {
-        el.textContent = '';
-      }
-      // แสดง พ.ศ. ของวันหมดสัญญาด้วย
-      const endVal = document.getElementById('contractEnd').value;
-      const endEl = document.getElementById('contractEndThai');
-      if (endEl && endVal) {
-        endEl.textContent = '(พ.ศ. ' + toThaiDate(endVal) + ')';
-      } else if (endEl) {
-        endEl.textContent = '';
-      }
+    // ตั้งค่า วัน/เดือน/ปีพ.ศ. จาก ISO string
+    function setThaiDateFields(isoStr) {
+      if (!isoStr) return;
+      const d = new Date(isoStr);
+      document.getElementById('startDay').value = d.getDate();
+      document.getElementById('startMonth').value = d.getMonth() + 1;
+      document.getElementById('startYear').value = d.getFullYear() + 543;
     }
 
     calcRounds();
