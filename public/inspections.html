@@ -76,10 +76,17 @@
       </div>
 
       <!-- Filter -->
-      <div class="filter-bar">
-        <div class="search-box">
+      <div class="filter-bar" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <div class="search-box" style="flex:1;min-width:200px;">
           <span class="search-icon">🔍</span>
           <input type="text" id="searchInput" placeholder="ค้นหาชื่อลูกค้า..." oninput="debounceSearch()">
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-sm btn-outline" onclick="changeFilterMonth(-1)">◀</button>
+          <select class="form-control" id="filterMonth" onchange="renderList()" style="width:auto;padding:6px 12px;">
+            <option value="">ทุกเดือน</option>
+          </select>
+          <button class="btn btn-sm btn-outline" onclick="changeFilterMonth(1)">▶</button>
         </div>
       </div>
 
@@ -132,6 +139,35 @@
       document.getElementById('tabMyClaims').style.display = '';
     }
 
+    // สร้าง options เดือน/ปี สำหรับ filter
+    function buildMonthOptions() {
+      const select = document.getElementById('filterMonth');
+      const now = new Date();
+      // สร้าง 12 เดือนย้อนหลัง + 12 เดือนข้างหน้า
+      for (let offset = -12; offset <= 12; offset++) {
+        const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+        const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const label = `${THAI_MONTHS[d.getMonth()]} ${d.getFullYear() + BE_OFFSET}`;
+        const opt = document.createElement('option');
+        opt.value = val;
+        opt.textContent = label;
+        // เลือกเดือนปัจจุบันเป็น default
+        if (offset === 0) opt.selected = true;
+        select.appendChild(opt);
+      }
+    }
+    buildMonthOptions();
+
+    function changeFilterMonth(delta) {
+      const select = document.getElementById('filterMonth');
+      const idx = select.selectedIndex;
+      const newIdx = idx + delta;
+      if (newIdx >= 0 && newIdx < select.options.length) {
+        select.selectedIndex = newIdx;
+        renderList();
+      }
+    }
+
     async function loadInspections() {
       try {
         let url = '/api/inspections';
@@ -174,6 +210,15 @@
         data = data.filter(i => i.claimedBy === currentTechId && currentTechId);
       } else if (currentTab !== 'all') {
         data = data.filter(i => i.status === currentTab);
+      }
+
+      // Filter by month
+      const filterMonth = document.getElementById('filterMonth').value;
+      if (filterMonth) {
+        data = data.filter(i => {
+          if (!i.dueDate) return false;
+          return i.dueDate.substring(0, 7) === filterMonth;
+        });
       }
 
       // Search

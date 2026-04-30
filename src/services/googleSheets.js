@@ -172,7 +172,7 @@ async function ensureSheets() {
           'รหัสลูกค้า', 'ชื่อ', 'เบอร์โทร', 'ที่อยู่', 'ลักษณะอาคาร',
           'พื้นที่(ตร.ม.)', 'ลักษณะงาน', 'ราคา', 'วันทำสัญญา', 'วันหมดสัญญา',
           'รอบรับประกัน(ปี)', 'รอบตรวจเช็ค(เดือน)', 'สถานะ', 'หมายเหตุ',
-          'created_at', 'updated_at',
+          'created_at', 'updated_at', 'Google Maps', 'รูปบ้าน',
         ]);
       } else if (sheetName === config.sheets.inspections) {
         await appendRow(sheetName, [

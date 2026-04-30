@@ -1,16 +1,19 @@
 const express = require('express');
+const multer = require('multer');
 const sheets = require('../services/googleSheets');
 const audit = require('../services/auditLog');
 const config = require('../config');
 const { toISO, addYears, addMonths, nowISO, daysBetween, today } = require('../utils/dateUtils');
 
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
 const router = express.Router();
 
-// คอลัมน์ลูกค้า (เพิ่ม พื้นที่ตร.ม. ที่ index 5)
+// คอลัมน์ลูกค้า
 // 0:รหัส 1:ชื่อ 2:เบอร์โทร 3:ที่อยู่ 4:ลักษณะอาคาร 5:พื้นที่(ตร.ม.)
 // 6:ลักษณะงาน 7:ราคา 8:วันทำสัญญา 9:วันหมดสัญญา
 // 10:รอบรับประกัน(ปี) 11:รอบตรวจเช็ค(เดือน) 12:สถานะ 13:หมายเหตุ
-// 14:created_at 15:updated_at
+// 14:created_at 15:updated_at 16:Google Maps 17:รูปบ้าน
 
 function rowToCustomer(row, index) {
   return {
@@ -30,6 +33,8 @@ function rowToCustomer(row, index) {
     notes: row[13] || '',
     createdAt: row[14] || '',
     updatedAt: row[15] || '',
+    googleMap: row[16] || '',
+    photos: row[17] || '',
     _rowIndex: index + 1,
   };
 }
@@ -119,7 +124,7 @@ router.post('/', async (req, res) => {
   try {
     const {
       name, phone, address, buildingType, area, jobType, price,
-      contractStart, warrantyYears, inspectionIntervalMonths, notes,
+      contractStart, warrantyYears, inspectionIntervalMonths, notes, googleMap,
     } = req.body;
 
     if (!name || !contractStart) {
@@ -135,23 +140,26 @@ router.post('/', async (req, res) => {
       id, name, phone || '', address || '', buildingType || '',
       area || '', jobType || '', price || '', contractStart, contractEnd,
       warrantyYears || '0', inspectionIntervalMonths || '4',
-      'active', notes || '', now, now,
+      'active', notes || '', now, now, googleMap || '', '',
     ];
 
     await sheets.appendRow(config.sheets.customers, customerRow);
 
     // สร้างตารางตรวจเช็คอัตโนมัติ (เฉพาะกรณีมีรับประกัน)
+    // รอบที่ 1 = วันทำสัญญา, รอบที่ 2+ = +interval เดือน
     let inspectionsCreated = 0;
     if (warranty > 0) {
       const interval = parseInt(inspectionIntervalMonths) || 4;
-      const totalRounds = Math.floor((warranty * 12) / interval);
+      const totalRounds = Math.floor((warranty * 12) / interval) + 1; // +1 สำหรับรอบแรก
       const inspectionRows = [];
 
-      for (let i = 1; i <= totalRounds; i++) {
+      for (let i = 0; i < totalRounds; i++) {
         const insId = await sheets.generateId(config.sheets.inspections, 'INS');
-        const dueDate = toISO(addMonths(contractStart, i * interval));
+        const dueDate = i === 0
+          ? contractStart  // รอบที่ 1 = วันทำสัญญา
+          : toISO(addMonths(contractStart, i * interval));
         inspectionRows.push([
-          insId, id, String(i), dueDate, '', 'pending', '', '', '', now, now,
+          insId, id, String(i + 1), dueDate, '', 'pending', '', '', '', now, now,
         ]);
       }
 
@@ -195,7 +203,7 @@ router.put('/:id', async (req, res) => {
     const {
       name, phone, address, buildingType, area, jobType, price,
       contractStart, warrantyYears, inspectionIntervalMonths,
-      status, notes,
+      status, notes, googleMap,
     } = req.body;
 
     const warranty = parseInt(warrantyYears ?? old.warrantyYears) || 0;
@@ -221,6 +229,8 @@ router.put('/:id', async (req, res) => {
       notes ?? old.notes,
       old.createdAt,
       nowISO(),
+      googleMap ?? old.googleMap,
+      old.photos,
     ];
 
     await sheets.updateRow(config.sheets.customers, rowIndex, updatedRow);
@@ -283,9 +293,10 @@ router.post('/:id/renew', async (req, res) => {
     await sheets.updateRow(config.sheets.customers, rowIndex, oldRow);
 
     // สร้างตารางตรวจเช็คใหม่ (เฉพาะกรณีมีรับประกัน)
+    // รอบแรกของสัญญาใหม่ = วันทำสัญญาใหม่
     let inspectionsCreated = 0;
     if (warranty > 0) {
-      const totalRounds = Math.floor((warranty * 12) / interval);
+      const totalRounds = Math.floor((warranty * 12) / interval) + 1;
       const inspectionRows = [];
 
       const inspRows = await sheets.getRows(config.sheets.inspections);
@@ -297,11 +308,13 @@ router.post('/:id/renew', async (req, res) => {
         }
       });
 
-      for (let i = 1; i <= totalRounds; i++) {
+      for (let i = 0; i < totalRounds; i++) {
         const insId = await sheets.generateId(config.sheets.inspections, 'INS');
-        const dueDate = toISO(addMonths(newContractStart, i * interval));
+        const dueDate = i === 0
+          ? newContractStart
+          : toISO(addMonths(newContractStart, i * interval));
         inspectionRows.push([
-          insId, req.params.id, String(maxRound + i), dueDate, '', 'pending',
+          insId, req.params.id, String(maxRound + i + 1), dueDate, '', 'pending',
           '', '', '', now, now,
         ]);
       }
@@ -319,6 +332,52 @@ router.post('/:id/renew', async (req, res) => {
     res.json({ success: true, contractEnd: newContractEnd, inspectionsCreated });
   } catch (err) {
     console.error('POST /customers/:id/renew error:', err);
+    res.status(500).json({ error: 'เกิดข้อผิดพลาด: ' + err.message });
+  }
+});
+
+// POST /api/customers/:id/photos - อัพโหลดรูปบ้านลูกค้า
+router.post('/:id/photos', upload.array('photos', 10), async (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'กรุณาเลือกรูปภาพ' });
+    }
+
+    const rows = await sheets.getRows(config.sheets.customers);
+    let rowIndex = -1;
+    let oldRow = null;
+
+    for (let i = 1; i < rows.length; i++) {
+      if (rows[i][0] === req.params.id) {
+        rowIndex = i + 1;
+        oldRow = rows[i];
+        break;
+      }
+    }
+
+    if (rowIndex === -1) return res.status(404).json({ error: 'ไม่พบลูกค้า' });
+
+    const uploadedLinks = [];
+    for (const file of req.files) {
+      const result = await sheets.uploadFile(
+        file.buffer,
+        `${req.params.id}_house_${Date.now()}_${file.originalname}`,
+        file.mimetype
+      );
+      uploadedLinks.push(result.directLink);
+    }
+
+    while (oldRow.length < 18) oldRow.push('');
+    const existingPhotos = oldRow[17] ? oldRow[17].split(',') : [];
+    const allPhotos = [...existingPhotos, ...uploadedLinks];
+    oldRow[17] = allPhotos.join(',');
+    oldRow[15] = nowISO();
+
+    await sheets.updateRow(config.sheets.customers, rowIndex, oldRow);
+
+    res.json({ success: true, photos: uploadedLinks });
+  } catch (err) {
+    console.error('POST /customers/:id/photos error:', err);
     res.status(500).json({ error: 'เกิดข้อผิดพลาด: ' + err.message });
   }
 });

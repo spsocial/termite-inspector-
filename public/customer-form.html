@@ -94,8 +94,9 @@
 
             <div class="form-row">
               <div class="form-group">
-                <label>วันทำสัญญา *</label>
-                <input type="date" class="form-control" id="contractStart" required onchange="calcEndDate()">
+                <label>วันทำสัญญา * <span id="contractStartThai" style="color:var(--primary);font-weight:600;"></span></label>
+                <input type="date" class="form-control" id="contractStart" required onchange="calcEndDate(); showThaiDate()">
+                <small style="color:var(--gray-500)">ระบบใช้ ค.ศ. กรอก ค.ศ. ได้เลย จะแสดง พ.ศ. ให้อัตโนมัติ (ค.ศ.+543=พ.ศ.)</small>
               </div>
             </div>
 
@@ -122,13 +123,27 @@
 
             <div class="form-row">
               <div class="form-group">
-                <label>วันหมดสัญญา (คำนวณอัตโนมัติ)</label>
+                <label>วันหมดสัญญา (คำนวณอัตโนมัติ) <span id="contractEndThai" style="color:var(--primary);font-weight:600;"></span></label>
                 <input type="date" class="form-control" id="contractEnd" readonly style="background:var(--gray-100);">
               </div>
               <div class="form-group">
                 <label>จำนวนรอบตรวจเช็ค</label>
                 <input type="text" class="form-control" id="totalRounds" readonly style="background:var(--gray-100);" value="จะสร้างอัตโนมัติ">
               </div>
+            </div>
+
+            <div class="form-group">
+              <label>Google Maps (ที่ตั้งลูกค้า)</label>
+              <input type="text" class="form-control" id="googleMap" placeholder="วางลิงก์ Google Maps หรือพิกัด เช่น 13.7563,100.5018">
+              <small style="color:var(--gray-500)">เปิด Google Maps → กดค้างที่ตำแหน่ง → คัดลอกลิงก์มาวาง</small>
+            </div>
+
+            <div class="form-group">
+              <label>รูปบ้านลูกค้า</label>
+              <input type="file" class="form-control" id="housePhotos" accept="image/*" multiple>
+              <small style="color:var(--gray-500)">เลือกได้หลายรูป (สูงสุด 10 รูป) — จะอัพโหลดหลังบันทึกลูกค้า</small>
+              <div id="photoPreview" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"></div>
+              <div id="existingPhotos" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"></div>
             </div>
 
             <div class="form-group">
@@ -216,8 +231,27 @@
         document.getElementById('inspectionIntervalMonths').value = c.inspectionIntervalMonths || '4';
         document.getElementById('status').value = c.status;
         document.getElementById('notes').value = c.notes;
+        document.getElementById('googleMap').value = c.googleMap || '';
+
+        // แสดงรูปบ้านที่มีอยู่แล้ว
+        if (c.photos) {
+          const container = document.getElementById('existingPhotos');
+          const links = c.photos.split(',').filter(Boolean);
+          container.innerHTML = links.map(url =>
+            `<a href="${url}" target="_blank"><img src="${url}" style="width:100px;height:100px;object-fit:cover;border-radius:8px;border:1px solid var(--gray-200)"></a>`
+          ).join('');
+        }
+
+        // แสดงลิงก์ Google Map ถ้ามี
+        if (c.googleMap) {
+          const mapLink = c.googleMap.startsWith('http') ? c.googleMap : `https://www.google.com/maps?q=${c.googleMap}`;
+          document.getElementById('googleMap').insertAdjacentHTML('afterend',
+            `<a href="${mapLink}" target="_blank" class="btn btn-sm btn-outline" style="margin-top:6px">📍 เปิดแผนที่</a>`
+          );
+        }
 
         calcRounds();
+        showThaiDate();
         renderInspections(c.inspections || []);
       } catch (err) {
         showToast(err.message, 'error');
@@ -257,6 +291,7 @@
         document.getElementById('contractEnd').value = d.toISOString().split('T')[0];
       }
       calcRounds();
+      showThaiDate();
     }
 
     function calcRounds() {
@@ -266,8 +301,8 @@
         document.getElementById('totalRounds').value = 'ไม่มี (ไม่รับประกัน)';
         return;
       }
-      const rounds = Math.floor((years * 12) / interval);
-      document.getElementById('totalRounds').value = `${rounds} รอบ (ทุก ${interval} เดือน)`;
+      const rounds = Math.floor((years * 12) / interval) + 1; // +1 รวมรอบแรก (วันทำสัญญา)
+      document.getElementById('totalRounds').value = `${rounds} รอบ (รอบแรก=วันทำสัญญา + ทุก ${interval} เดือน)`;
     }
 
     async function submitForm(e) {
@@ -284,6 +319,7 @@
         warrantyYears: document.getElementById('warrantyYears').value,
         inspectionIntervalMonths: document.getElementById('inspectionIntervalMonths').value,
         notes: document.getElementById('notes').value,
+        googleMap: document.getElementById('googleMap').value,
       };
 
       if (editId) {
@@ -291,18 +327,46 @@
       }
 
       try {
+        let customerId = editId;
+
         if (editId) {
           await API.put(`/api/customers/${editId}`, data);
           showToast('อัพเดทข้อมูลเรียบร้อย');
         } else {
           const result = await API.post('/api/customers', data);
+          customerId = result.customer.id;
           showToast(`เพิ่มลูกค้าเรียบร้อย (สร้าง ${result.inspectionsCreated} รอบตรวจเช็ค)`);
+        }
+
+        // อัพโหลดรูปบ้าน (ถ้ามี)
+        const fileInput = document.getElementById('housePhotos');
+        if (fileInput.files.length > 0) {
+          showToast('กำลังอัพโหลดรูป...', 'warning');
+          const formData = new FormData();
+          for (const file of fileInput.files) {
+            formData.append('photos', file);
+          }
+          await API.upload(`/api/customers/${customerId}/photos`, formData);
+          showToast('อัพโหลดรูปเรียบร้อย');
+        }
+
+        if (!editId) {
           setTimeout(() => window.location.href = '/customers', 1500);
         }
       } catch (err) {
         showToast(err.message, 'error');
       }
     }
+
+    // Preview รูปที่เลือก
+    document.getElementById('housePhotos').addEventListener('change', function() {
+      const preview = document.getElementById('photoPreview');
+      preview.innerHTML = '';
+      for (const file of this.files) {
+        const url = URL.createObjectURL(file);
+        preview.innerHTML += `<img src="${url}" style="width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid var(--gray-200)">`;
+      }
+    });
 
     function showRenewModal() {
       showModal('ต่อสัญญา', `
@@ -346,6 +410,24 @@
         loadCustomer();
       } catch (err) {
         showToast(err.message, 'error');
+      }
+    }
+
+    function showThaiDate() {
+      const val = document.getElementById('contractStart').value;
+      const el = document.getElementById('contractStartThai');
+      if (val) {
+        el.textContent = '(พ.ศ. ' + toThaiDate(val) + ')';
+      } else {
+        el.textContent = '';
+      }
+      // แสดง พ.ศ. ของวันหมดสัญญาด้วย
+      const endVal = document.getElementById('contractEnd').value;
+      const endEl = document.getElementById('contractEndThai');
+      if (endEl && endVal) {
+        endEl.textContent = '(พ.ศ. ' + toThaiDate(endVal) + ')';
+      } else if (endEl) {
+        endEl.textContent = '';
       }
     }
 
