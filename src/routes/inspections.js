@@ -235,8 +235,19 @@ router.put('/:id/complete', async (req, res) => {
     oldRow[7] = technician || oldRow[7] || '';
     oldRow[10] = now;
 
-    console.log(`Complete ${req.params.id}: row=${rowIndex}, date=${todayStr}, tech=${technician}, status=completed`);
-    await sheets.updateRow(config.sheets.inspections, rowIndex, oldRow);
+    // อัพเดทเฉพาะ cells ที่จำเป็น (E=วันตรวจจริง, F=สถานะ, G=ผลการตรวจ, H=ช่าง, K=updated_at)
+    console.log(`Complete ${req.params.id}: row=${rowIndex}, date=${todayStr}, tech=${technician}`);
+
+    await sheets.updateCells(config.sheets.inspections, `E${rowIndex}:H${rowIndex}`, [
+      [todayStr, 'completed', result || oldRow[6] || '', technician || oldRow[7] || '']
+    ]);
+    // อัพเดท updated_at แยก
+    await sheets.updateCells(config.sheets.inspections, `K${rowIndex}`, [[now]]);
+
+    // ตรวจสอบว่าเขียนสำเร็จจริง
+    const verifyRows = await sheets.getRows(config.sheets.inspections);
+    const verifyRow = verifyRows[rowIndex - 1];
+    console.log(`VERIFY: row ${rowIndex}, status="${verifyRow?.[5]}", id="${verifyRow?.[0]}"`);
 
     await audit.log('complete', 'inspection', req.params.id, {
       actualDate: todayStr, result, technician,
