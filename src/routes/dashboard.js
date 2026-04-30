@@ -66,14 +66,14 @@ router.get('/stats', async (req, res) => {
       }
     });
 
-    // สัญญาใกล้หมด (30 วัน)
+    // สัญญาใกล้หมด (90 วัน)
     const expiringContracts = [];
     customers.forEach(row => {
       if (row[11] !== 'active') return;
       const contractEnd = row[8] ? new Date(row[8]) : null;
       if (!contractEnd) return;
       const days = daysBetween(now, contractEnd);
-      if (days >= 0 && days <= 30) {
+      if (days >= 0 && days <= 90) {
         expiringContracts.push({
           id: row[0],
           name: row[1],
