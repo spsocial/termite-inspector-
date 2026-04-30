@@ -116,16 +116,22 @@ async function generateId(sheetName, prefix) {
 // อัพโหลดไฟล์ไปยัง Google Drive
 async function uploadFile(fileBuffer, fileName, mimeType) {
   const drive = await getDrive();
+
+  if (!config.google.driveFolderId) {
+    throw new Error('ยังไม่ได้ตั้งค่า GOOGLE_DRIVE_FOLDER_ID');
+  }
+
   const res = await drive.files.create({
     requestBody: {
       name: fileName,
-      parents: config.google.driveFolderId ? [config.google.driveFolderId] : [],
+      parents: [config.google.driveFolderId],
     },
     media: {
       mimeType,
       body: require('stream').Readable.from(fileBuffer),
     },
     fields: 'id, webViewLink, webContentLink',
+    supportsAllDrives: true,
   });
 
   // ทำให้ไฟล์เป็น public
@@ -135,6 +141,7 @@ async function uploadFile(fileBuffer, fileName, mimeType) {
       role: 'reader',
       type: 'anyone',
     },
+    supportsAllDrives: true,
   });
 
   return {
