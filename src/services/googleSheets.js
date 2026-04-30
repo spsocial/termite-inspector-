@@ -90,6 +90,38 @@ async function updateCells(sheetName, range, values) {
   });
 }
 
+// ลบแถว (ใช้ sheetId ซึ่งต้องหาจาก sheet metadata)
+async function deleteRows(sheetName, rowIndices) {
+  if (rowIndices.length === 0) return;
+  const sheets = await getSheets();
+
+  // หา sheetId จากชื่อ sheet
+  const meta = await sheets.spreadsheets.get({
+    spreadsheetId: config.google.spreadsheetId,
+  });
+  const sheetMeta = meta.data.sheets.find(s => s.properties.title === sheetName);
+  if (!sheetMeta) return;
+  const sheetId = sheetMeta.properties.sheetId;
+
+  // ลบจากล่างขึ้นบน เพื่อไม่ให้ index เลื่อน
+  const sorted = [...rowIndices].sort((a, b) => b - a);
+  const requests = sorted.map(rowIndex => ({
+    deleteDimension: {
+      range: {
+        sheetId,
+        dimension: 'ROWS',
+        startIndex: rowIndex - 1, // 0-based
+        endIndex: rowIndex,
+      },
+    },
+  }));
+
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId: config.google.spreadsheetId,
+    requestBody: { requests },
+  });
+}
+
 // หา row index จากค่าในคอลัมน์แรก (รหัส)
 async function findRowIndex(sheetName, id) {
   const rows = await getRows(sheetName);
@@ -212,6 +244,7 @@ module.exports = {
   findRowIndex,
   generateId,
   uploadFile,
+  deleteRows,
   ensureSheets,
   getSheets,
   getDrive,

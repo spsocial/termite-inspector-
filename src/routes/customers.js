@@ -336,6 +336,46 @@ router.post('/:id/renew', async (req, res) => {
   }
 });
 
+// DELETE /api/customers/:id - ลบลูกค้า + ตารางตรวจเช็คทั้งหมด
+router.delete('/:id', async (req, res) => {
+  try {
+    // หา row ลูกค้า
+    const custRows = await sheets.getRows(config.sheets.customers);
+    let custRowIndex = -1;
+    for (let i = 1; i < custRows.length; i++) {
+      if (custRows[i][0] === req.params.id) {
+        custRowIndex = i + 1;
+        break;
+      }
+    }
+    if (custRowIndex === -1) return res.status(404).json({ error: 'ไม่พบลูกค้า' });
+
+    // หา rows ตรวจเช็คที่เกี่ยวข้อง
+    const inspRows = await sheets.getRows(config.sheets.inspections);
+    const inspRowIndices = [];
+    for (let i = 1; i < inspRows.length; i++) {
+      if (inspRows[i][1] === req.params.id) {
+        inspRowIndices.push(i + 1);
+      }
+    }
+
+    // ลบตรวจเช็คก่อน (ถ้ามี)
+    if (inspRowIndices.length > 0) {
+      await sheets.deleteRows(config.sheets.inspections, inspRowIndices);
+    }
+
+    // ลบลูกค้า
+    await sheets.deleteRows(config.sheets.customers, [custRowIndex]);
+
+    await audit.log('delete', 'customer', req.params.id, { inspectionsDeleted: inspRowIndices.length }, req.user?.displayName || 'admin');
+
+    res.json({ success: true, inspectionsDeleted: inspRowIndices.length });
+  } catch (err) {
+    console.error('DELETE /customers/:id error:', err);
+    res.status(500).json({ error: 'เกิดข้อผิดพลาด: ' + err.message });
+  }
+});
+
 // POST /api/customers/:id/photos - อัพโหลดรูปบ้านลูกค้า
 router.post('/:id/photos', upload.array('photos', 10), async (req, res) => {
   try {

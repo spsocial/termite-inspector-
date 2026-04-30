@@ -258,6 +258,29 @@ router.put('/:id/complete', async (req, res) => {
   }
 });
 
+// DELETE /api/inspections/:id - ลบรอบตรวจเช็ค
+router.delete('/:id', async (req, res) => {
+  try {
+    const inspRows = await sheets.getRows(config.sheets.inspections);
+    let rowIndex = -1;
+    for (let i = 1; i < inspRows.length; i++) {
+      if (inspRows[i][0] === req.params.id) {
+        rowIndex = i + 1;
+        break;
+      }
+    }
+    if (rowIndex === -1) return res.status(404).json({ error: 'ไม่พบรายการตรวจเช็ค' });
+
+    await sheets.deleteRows(config.sheets.inspections, [rowIndex]);
+    await audit.log('delete', 'inspection', req.params.id, {}, getUserName(req));
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('DELETE /inspections/:id error:', err);
+    res.status(500).json({ error: 'เกิดข้อผิดพลาด: ' + err.message });
+  }
+});
+
 // PUT /api/inspections/:id - อัพเดทรายละเอียด
 router.put('/:id', async (req, res) => {
   try {

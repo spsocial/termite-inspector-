@@ -302,16 +302,6 @@
           const isOverdue = i.status === 'overdue' || (i.status === 'pending' && i.daysUntilDue < 0);
           const isCompleted = i.status === 'completed';
           const isSelected = selectedIds.has(i.id);
-          const isMyClaim = i.claimedBy === currentTechId && currentTechId;
-
-          let claimBtn = '';
-          if (!isCompleted) {
-            if (isMyClaim) {
-              claimBtn = `<button class="btn btn-sm" style="background:var(--warning);color:#fff;font-size:12px;padding:2px 8px;" onclick="event.stopPropagation();claimJob('${i.id}')">ยกเลิกรับ</button>`;
-            } else if (!i.claimedBy) {
-              claimBtn = `<button class="btn btn-sm btn-primary" style="font-size:12px;padding:2px 8px;" onclick="event.stopPropagation();claimJob('${i.id}')">รับงาน</button>`;
-            }
-          }
 
           return `
             <div class="round-item ${isOverdue ? 'overdue' : ''}">
@@ -325,14 +315,13 @@
                 <span style="color:var(--gray-500);margin-left:8px">กำหนด ${toThaiDate(i.dueDate)}</span>
                 ${i.actualDate ? `<span style="color:var(--gray-500);margin-left:8px">ตรวจจริง ${toThaiDate(i.actualDate)}</span>` : ''}
                 ${i.technician ? `<span style="margin-left:8px">👷 ${i.technician}</span>` : ''}
-                ${i.claimedByName ? `<span style="color:var(--primary);margin-left:8px">📌 ${i.claimedByName}</span>` : ''}
               </div>
               <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;">
                 ${isOverdue ? `<span class="badge badge-danger" style="font-size:11px">เกิน ${Math.abs(i.daysUntilDue)} วัน</span>` : ''}
                 ${!isOverdue && !isCompleted && i.daysUntilDue !== null && i.daysUntilDue <= 7 ? daysLabel(i.daysUntilDue) : ''}
-                ${claimBtn}
-                ${!isCompleted ? `<button class="btn btn-sm btn-success" style="font-size:12px;padding:2px 8px;" onclick="event.stopPropagation();quickComplete('${i.id}','${i.customerName.replace(/'/g,"\\'")}')">✓</button>` : ''}
+                ${!isCompleted ? `<button class="btn btn-sm btn-success" style="font-size:12px;padding:2px 8px;" onclick="event.stopPropagation();quickComplete('${i.id}','${i.customerName.replace(/'/g,"\\'")}')">✓ เสร็จ</button>` : ''}
                 <a href="/inspection-detail?id=${i.id}" class="btn btn-sm btn-outline" style="font-size:12px;padding:2px 8px;" onclick="event.stopPropagation()">ดู</a>
+                ${isAdmin() ? `<button class="btn btn-sm" style="font-size:12px;padding:2px 8px;color:var(--danger);border:1px solid var(--danger);background:white;" onclick="event.stopPropagation();deleteInspection('${i.id}')">🗑</button>` : ''}
               </div>
             </div>
           `;
@@ -390,14 +379,11 @@
       bar.classList.toggle('show', selectedIds.size > 0);
     }
 
-    async function claimJob(id) {
+    async function deleteInspection(id) {
+      if (!confirm('ยืนยันลบรอบตรวจเช็คนี้?')) return;
       try {
-        const result = await API.put(`/api/inspections/${id}/claim`);
-        if (result.action === 'claimed') {
-          showToast('รับงานเรียบร้อย');
-        } else {
-          showToast('ยกเลิกรับงานแล้ว');
-        }
+        await API.del(`/api/inspections/${id}`);
+        showToast('ลบรอบตรวจเช็คเรียบร้อย');
         loadInspections();
       } catch (err) {
         showToast(err.message, 'error');
