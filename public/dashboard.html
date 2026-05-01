@@ -154,7 +154,7 @@
       }
 
       el.innerHTML = `<table><tbody>${list.map(i => `
-        <tr>
+        <tr id="row-${i.id}">
           <td>
             <div style="font-weight:600">${i.customerName}</div>
             <div style="font-size:12px;color:var(--gray-500)">รอบที่ ${i.round}</div>
@@ -178,7 +178,7 @@
       }
 
       el.innerHTML = `<table><tbody>${list.map(i => `
-        <tr class="row-overdue">
+        <tr class="row-overdue" id="row-${i.id}">
           <td>
             <div style="font-weight:600">${i.customerName}</div>
             <div style="font-size:12px;color:var(--gray-500)">รอบที่ ${i.round}</div>
@@ -352,6 +352,14 @@
       const photoFileList = photoInput ? Array.from(photoInput.files) : [];
 
       closeModal();
+
+      // ลบ row ออกจากหน้าทันที ป้องกันกดซ้ำ
+      const targetRow = document.getElementById('row-' + id);
+      if (targetRow) {
+        targetRow.style.opacity = '0.3';
+        targetRow.style.pointerEvents = 'none';
+      }
+
       showOverlay('กำลังบันทึกผลตรวจเช็ค...');
 
       try {
@@ -368,8 +376,19 @@
           await API.upload(`/api/inspections/${id}/photos`, formData);
         }
 
-        document.getElementById('overlayMsg').textContent = 'สำเร็จ! กำลังโหลดใหม่...';
-        setTimeout(() => window.location.reload(), 1500);
+        // ลบ row ที่เสร็จออกจากหน้าทันที (ไม่ต้องรอ reload)
+        hideOverlay();
+        const completedRow = document.getElementById('row-' + id);
+        if (completedRow) {
+          completedRow.style.transition = 'all 0.3s';
+          completedRow.style.opacity = '0';
+          completedRow.style.transform = 'translateX(100%)';
+          setTimeout(() => completedRow.remove(), 300);
+        }
+        showToast('บันทึกเสร็จสิ้นเรียบร้อย');
+
+        // รอนานขึ้นก่อน reload เพื่อให้ Google Sheets sync
+        setTimeout(() => window.location.reload(), 5000);
       } catch (err) {
         hideOverlay();
         showToast(err.message || 'เกิดข้อผิดพลาด', 'error');
