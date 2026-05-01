@@ -339,23 +339,29 @@
     }
 
     async function confirmComplete(id) {
-      let technician = document.getElementById('qcTech').value;
-      if (technician === '__other') technician = document.getElementById('qcTechOther').value;
-      const result = document.getElementById('qcResult').value;
-      const actualDate = document.getElementById('qcDate').value;
+      // อ่านค่าจาก modal ก่อนปิด
+      const technician_sel = document.getElementById('qcTech')?.value || '';
+      const technician = technician_sel === '__other'
+        ? (document.getElementById('qcTechOther')?.value || '')
+        : technician_sel;
+      const result = document.getElementById('qcResult')?.value || '';
+      const actualDate = document.getElementById('qcDate')?.value || '';
+
+      // เก็บ files ก่อนปิด modal (copy ออกมาก่อน)
+      const photoInput = document.getElementById('qcPhotos');
+      const photoFileList = photoInput ? Array.from(photoInput.files) : [];
+
+      closeModal();
+      showOverlay('กำลังบันทึกผลตรวจเช็ค...');
 
       try {
-        closeModal();
-        showOverlay('กำลังบันทึกผลตรวจเช็ค...');
-
         await API.put(`/api/inspections/${id}/complete`, { technician, result, actualDate });
 
         // อัพโหลดรูปหลักฐาน (ถ้ามี)
-        const photoFiles = document.getElementById('qcPhotos')?.files;
-        if (photoFiles && photoFiles.length > 0) {
+        if (photoFileList.length > 0) {
           document.getElementById('overlayMsg').textContent = 'กำลังอัพโหลดรูปหลักฐาน...';
           const formData = new FormData();
-          for (const file of photoFiles) {
+          for (const file of photoFileList) {
             const resized = await resizeImage(file);
             formData.append('photos', resized, file.name);
           }
@@ -365,7 +371,8 @@
         document.getElementById('overlayMsg').textContent = 'สำเร็จ! กำลังโหลดใหม่...';
         setTimeout(() => window.location.reload(), 1500);
       } catch (err) {
-        showToast(err.message, 'error');
+        hideOverlay();
+        showToast(err.message || 'เกิดข้อผิดพลาด', 'error');
       }
     }
 

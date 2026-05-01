@@ -466,28 +466,31 @@
     }
 
     async function confirmComplete(id) {
+      // อ่านค่า + copy files ก่อนปิด modal (สำคัญมาก!)
+      const techSel = document.getElementById('qcTech')?.value || '';
+      const techName = techSel === '__other'
+        ? (document.getElementById('qcTechOther')?.value || '')
+        : techSel;
+      const resultText = document.getElementById('qcResult')?.value || '';
+      const actualDate = document.getElementById('qcDate')?.value || '';
+      const photoInput = document.getElementById('qcPhotos');
+      const photoFileList = photoInput ? Array.from(photoInput.files) : [];
+
+      closeModal();
+      showOverlay('กำลังบันทึกผลตรวจเช็ค...');
+
       try {
-        let techName = document.getElementById('qcTech').value;
-        if (techName === '__other') {
-          techName = document.getElementById('qcTechOther').value;
-        }
-        const actualDate = document.getElementById('qcDate').value;
-
-        closeModal();
-        showOverlay('กำลังบันทึกผลตรวจเช็ค...');
-
         await API.put(`/api/inspections/${id}/complete`, {
           technician: techName,
-          result: document.getElementById('qcResult').value,
+          result: resultText,
           actualDate,
         });
 
         // อัพโหลดรูปหลักฐาน (ถ้ามี)
-        const photoFiles = document.getElementById('qcPhotos')?.files;
-        if (photoFiles && photoFiles.length > 0) {
+        if (photoFileList.length > 0) {
           document.getElementById('overlayMsg').textContent = 'กำลังอัพโหลดรูปหลักฐาน...';
           const formData = new FormData();
-          for (const file of photoFiles) {
+          for (const file of photoFileList) {
             const resized = await resizeImage(file);
             formData.append('photos', resized, file.name);
           }
@@ -497,7 +500,8 @@
         document.getElementById('overlayMsg').textContent = 'สำเร็จ! กำลังโหลดใหม่...';
         setTimeout(() => window.location.reload(), 1500);
       } catch (err) {
-        showToast(err.message, 'error');
+        hideOverlay();
+        showToast(err.message || 'เกิดข้อผิดพลาด', 'error');
       }
     }
 
