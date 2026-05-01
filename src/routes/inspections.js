@@ -235,19 +235,31 @@ router.put('/:id/complete', async (req, res) => {
     oldRow[7] = technician || oldRow[7] || '';
     oldRow[10] = now;
 
-    // อัพเดทเฉพาะ cells ที่จำเป็น (E=วันตรวจจริง, F=สถานะ, G=ผลการตรวจ, H=ช่าง, K=updated_at)
-    console.log(`Complete ${req.params.id}: row=${rowIndex}, date=${todayStr}, tech=${technician}`);
+    // อัพเดทเฉพาะ cells ที่จำเป็น
+    console.log(`=== COMPLETE ${req.params.id} ===`);
+    console.log(`Found at array index ${rowIndex - 1}, sheet row ${rowIndex}`);
+    console.log(`Row ID: "${oldRow[0]}", Customer: "${oldRow[1]}", Round: "${oldRow[2]}"`);
+    console.log(`Writing to: E${rowIndex}:H${rowIndex} = [${todayStr}, completed, ${result || ''}, ${technician || ''}]`);
 
-    await sheets.updateCells(config.sheets.inspections, `E${rowIndex}:H${rowIndex}`, [
+    // ใช้ findRowIndex เพื่อความแม่นยำ
+    const confirmedRowIndex = await sheets.findRowIndex(config.sheets.inspections, req.params.id);
+    if (confirmedRowIndex !== rowIndex) {
+      console.error(`ROW INDEX MISMATCH! calculated=${rowIndex} vs findRowIndex=${confirmedRowIndex}`);
+    }
+    const finalRow = confirmedRowIndex > 0 ? confirmedRowIndex : rowIndex;
+
+    await sheets.updateCells(config.sheets.inspections, `E${finalRow}:H${finalRow}`, [
       [todayStr, 'completed', result || oldRow[6] || '', technician || oldRow[7] || '']
     ]);
-    // อัพเดท updated_at แยก
-    await sheets.updateCells(config.sheets.inspections, `K${rowIndex}`, [[now]]);
+    await sheets.updateCells(config.sheets.inspections, `K${finalRow}`, [[now]]);
 
     // ตรวจสอบว่าเขียนสำเร็จจริง
     const verifyRows = await sheets.getRows(config.sheets.inspections);
-    const verifyRow = verifyRows[rowIndex - 1];
-    console.log(`VERIFY: row ${rowIndex}, status="${verifyRow?.[5]}", id="${verifyRow?.[0]}"`);
+    const verifyRow = verifyRows[finalRow - 1];
+    console.log(`VERIFY: row ${finalRow}, id="${verifyRow?.[0]}", status="${verifyRow?.[5]}"`);
+    if (verifyRow?.[0] !== req.params.id) {
+      console.error(`WRONG ROW! Expected ID ${req.params.id} but got ${verifyRow?.[0]}`);
+    }
 
     await audit.log('complete', 'inspection', req.params.id, {
       actualDate: todayStr, result, technician,
